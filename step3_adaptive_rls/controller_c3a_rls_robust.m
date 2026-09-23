@@ -86,13 +86,11 @@ function [iL_cmd, iR_cmd, state_c3a, info] = controller_c3a_rls_robust( ...
     % 实际施加推力指令
     FG_applied = Kf_L * iL_cmd - Kf_R * iR_cmd;
     if nargin < 13 || isempty(yG_meas)
-        % 若未显式传入量化测量，默认根据控制器配置或传动参数当量计算
-        if isfield(ctrl_c2, 'dy_ecd')
-            dy_ecd = ctrl_c2.dy_ecd;
-        else
-            dy_ecd = (2.0 * pi * 0.030) / (19.0 * 8192); % 2*pi*rp / (N * ecd_cpr)
+        if ~isfield(ctrl_c2, 'dy_ecd')
+            error('controller_c3a_rls_robust:MissingEncoderScale', ...
+                  '缺少 ctrl_c2.dy_ecd，禁止使用隐含编码器比例');
         end
-        yG_meas = round(q(1) / dy_ecd) * dy_ecd;
+        yG_meas = round(q(1) / ctrl_c2.dy_ecd) * ctrl_c2.dy_ecd;
     end
     
     % 状态变量滤波递推
