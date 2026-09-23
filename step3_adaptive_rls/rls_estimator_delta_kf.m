@@ -22,7 +22,6 @@ classdef rls_estimator_delta_kf
         % 算法超参数
         lambda = 1.0;             % 遗忘因子 (默认 1.0 用于离线收敛, 可配置 0.98~1.0)
         sigma_PE_th = 50.0;       % PE 门控均方根能量阈值 (count*m)
-        G_PE_th;                  % PE 能量方阈值 (count*m)^2, 自动计算
         window_length = 200;      % PE 环形滑动窗口长度 (默认 200 步 = 200 ms)
         
         % 凸集投影边界 (单位: N/count)
@@ -72,24 +71,33 @@ classdef rls_estimator_delta_kf
                 if isfield(opts, 'theta0'),        obj.theta_hat = opts.theta0; end
             end
             
-            % 参数合法性断言
-            assert(obj.lambda > 0 && obj.lambda <= 1, 'lambda 必须在 (0, 1] 区间');
+            % 参数合法性与有限值断言
+            assert(isfinite(obj.lambda) && obj.lambda > 0 && obj.lambda <= 1, 'lambda 必须在 (0, 1] 区间且为有限值');
             assert(obj.window_length >= 1 && mod(obj.window_length, 1) == 0, 'window_length 必须为正整数');
+            assert(isfinite(obj.sigma_PE_th) && obj.sigma_PE_th >= 0, 'sigma_PE_th 必须为非负有限值');
             assert(obj.theta_min < obj.theta_max, 'theta_min 必须严格小于 theta_max');
-            assert(obj.P_min > 0 && obj.P_min <= obj.P_max, 'P_min 必须 > 0 且 <= P_max');
+            assert(isfinite(obj.P0) && obj.P0 > 0, 'P0 必须为正有限值');
+            assert(isfinite(obj.P_min) && isfinite(obj.P_max) && obj.P_min > 0 && obj.P_min <= obj.P_max, ...
+                'P_min 和 P_max 必须为有限值且 0 < P_min <= P_max');
+            assert(isfinite(obj.theta_hat), 'theta0 初值必须为有限值');
             
             % 初值安全保界约束
             obj.theta_hat = min(max(obj.theta_hat, obj.theta_min), obj.theta_max);
             obj.P0        = min(max(obj.P0, obj.P_min), obj.P_max);
             
-            obj.G_PE_th = obj.sigma_PE_th ^ 2;
             obj = obj.reset();
         end
         
         %% 重置估计器状态
         function obj = reset(obj, theta0, P0)
-            if nargin >= 2 && ~isempty(theta0), obj.theta_hat = theta0; end
-            if nargin >= 3 && ~isempty(P0),     obj.P0 = P0; end
+            if nargin >= 2 && ~isempty(theta0)
+                assert(isfinite(theta0), '重置 theta0 初值必须为有限值');
+                obj.theta_hat = theta0;
+            end
+            if nargin >= 3 && ~isempty(P0)
+                assert(isfinite(P0) && P0 > 0, '重置 P0 初值必须为正有限值');
+                obj.P0 = P0;
+            end
             
             % 初值安全保界
             obj.theta_hat = min(max(obj.theta_hat, obj.theta_min), obj.theta_max);

@@ -181,7 +181,7 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
   $$\theta_k = \text{proj}(\theta_{\text{unprojected}}) = \min(\max(\theta_{\text{unprojected}}, \theta_{\min}), \theta_{\max})$$
 - **环形缓冲区 PE 均方根能量门控**：
   - 维护 $N_W = 200\text{ 步}$（$200\text{ ms}$）环形缓冲区，计算均方根能量 $\text{pe\_metric} = \sqrt{\max(\frac{1}{N_W}\sum \phi_f^2, 0)}$；
-  - 门控阈值 $\sigma_{\text{PE,th}} = 50.0\text{ count}\cdot\text{m}$，对应能量方门限 $G_{\text{PE,th}} = 2500.0\ (\text{count}\cdot\text{m})^2$；
+  - 门控阈值 $\sigma_{\text{PE,th}} = 50.0\text{ count}\cdot\text{m}$，作为单一基准判定源；
   - **PE 不满足时绝对完全冻结**：$\theta_k = \theta_{k-1}, P_k = P_{k-1}$，严禁除以 $\lambda$，彻底隔绝静止与匀速段协方差风积。
 - **投影边界定义**：
   - **物理精确非对称边界**（对应 $r \in [0.65, 1.35]$）：$\theta_{\min} = -0.0026295\text{ N/count}, \theta_{\max} = +0.0018465\text{ N/count}$；
@@ -205,7 +205,7 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
    - $r=0.70$：估计值 $-0.0021887$，相对误差 **$0.0562\% \le 5.0\%$**，局部窗口估计变异率 **$0.0288\% \le 5.0\%$**，停顿误动 $0.0\%$，强激漏动 $0.0\%$，投影次数 $0$；
    - $r=1.30$：估计值 $+0.0016181$，相对误差 **$0.0798\% \le 5.0\%$**，局部窗口估计变异率 **$0.0436\% \le 5.0\%$**，停顿误动 $0.0\%$，强激漏动 $0.0\%$，投影次数 $0$；
    - 综合评定：Sensitivity: **PASS**，Projection: **NO_PROJECTION**。
-6. **Test E (结构参数误差敏感性与投影截断分离判定)**：
+6. **Test E (结构参数误差敏感性与投影截断分离判定：PASS_WITH_CLIPPING)**：
    - 显式分离“敏感性识别精度（Sensitivity_Status）”与“投影安全保护（Projection_Status）”；
    - **$B_\alpha \pm 20\%$**：传递增益 $0.019 \sim 0.033 \le 0.05$（正交相位抑制），投影次数 $0$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**；
    - **$J_0 \pm 20\%$**：传递增益 $-0.009 \sim -0.019 \le 0.05$（惯性解耦），投影次数 $0$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**；
@@ -213,7 +213,8 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
    - **$K_\alpha +20\% (r=1.30)$ 关键工况**：
      - 未受限纯 RLS 估计值为 **$+0.0019469\text{ N/count}$**（真实误差传递增益为 **$1.021$**）；
      - 物理上界为 **$+0.0018465\text{ N/count}$**，投影机制累计触发 **1065 次**截断，将最终估计值安全钳位在 **$+0.0018465\text{ N/count}$**，有效防止了参数发散；
-     - 判定分类：Projection_Status 评定为 **`PROJECTION_ACTIVE_CLAMPED`**（投影安全机制正常工作）；Sensitivity_Status 准确标记为 **`IDENTIFICATION_CLIPPED`**，明确不将截断后的估计值（增益表观降为 0.710）误用于评价辨识算法的敏感性精度。
+     - 判定分类：Projection_Status 评定为 **`PROJECTION_ACTIVE_CLAMPED`**（投影安全机制正常工作）；Sensitivity_Status 准确标记为 **`IDENTIFICATION_CLIPPED`**，明确不将截断后的估计值（增益表观降为 0.710）误用于评价辨识算法的敏感性精度；
+   - 总体结论：**`PASS_WITH_CLIPPING`**（11 工况辨识 PASS，1 工况截断保界）。
 7. **Test F (越界投影与协方差稳定性)**：
    - 正向极端冲击（$y = +10^6$）：确认 PE 激活（`is_pe == true`），未受约束估计 $\theta_{\text{unprojected}} = +497.5\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = +0.0018465\text{ N/count}$ 精确截断在物理上界，协方差 $P = 4.98\times 10^{-7}$ 有限且处于 $[P_{\min}, P_{\max}]$；
    - 负向极端冲击（$y = -10^6$）：确认 PE 激活（`is_pe == true`），未受约束估计 $\theta_{\text{unprojected}} = -332.2\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = -0.0026295\text{ N/count}$ 精确截断在物理下界，协方差 $P = 3.32\times 10^{-7}$ 有限且处于 $[P_{\min}, P_{\max}]$；
@@ -222,7 +223,34 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
    - 综合评定：Projection: **PASS**。
 
 ### 3. Phase 1 正式归档结论与范围边界
-单参数 $\Delta K_f$ 开环 RLS 估计器在理想连续状态和位置量化条件下**通过基准验证**；结构参数失配下的投影截断行为已单独识别并透明记录；**尚未接入闭环，也未包含真实驱动器电流反馈噪声**。
+单参数 $\Delta K_f$ 开环 RLS 估计器在理想连续状态和位置量化条件下**通过全套基准验证**（Test A-D, F: PASS; Test E: PASS_WITH_CLIPPING）；结构参数失配下的投影截断行为已单独识别并透明记录；**尚未接入闭环，也未包含真实驱动器电流反馈噪声**。
+
+---
+
+## 八、Step 3B Phase 2 技术方案与实施规划（离线标定与推力分配补偿）
+
+### 1. 目标与边界约束
+- **核心目标**：
+  基于 Phase 1 离线辨识得到的 $\hat{\Delta K}_f$ 与基准推力系数 $K_{f,\text{mean}}$，构建双轴驱动器推力系数离线标定与静态重分配补偿算法，分析标定残差对同步偏航的误差传播特性。
+- **严格边界承诺**：
+  1. **严格限定为离线标定与前馈增益计算**；
+  2. **绝对不修改闭环控制器结构（不接入 `controller_c3a_rls_robust.m`）**；
+  3. **绝对不修改 `SyncAlloc` 源码**；
+  4. **不宣称物理台架实验已验证**；
+  5. **所有提交均在本地 Git 完成，严禁 `git push`**。
+
+### 2. 标定与推力分配数学模型
+1. **推力系数离线标定重构**：
+   $$\hat{K}_{f,L} = K_{f,\text{mean}} + \frac{1}{2}\hat{\Delta K}_f, \quad \hat{K}_{f,R} = K_{f,\text{mean}} - \frac{1}{2}\hat{\Delta K}_f$$
+2. **驱动器对称补偿增益**：
+   引入标定无量纲增益因子 $\gamma_L, \gamma_R$：
+   $$\gamma_L = \frac{K_{f,\text{mean}}}{\hat{K}_{f,L}}, \quad \gamma_R = \frac{K_{f,\text{mean}}}{\hat{K}_{f,R}}$$
+   使标称控制器输出电流指令 $i_{L,\text{nom}}, i_{R,\text{nom}}$ 经增益缩放后实际推力对称：
+   $$i_{L,\text{comp}} = \gamma_L \cdot i_{L,\text{nom}}, \quad i_{R,\text{comp}} = \gamma_R \cdot i_{R,\text{nom}}$$
+3. **偏航残差与误差传播分析**：
+   当存在辨识残差 $\tilde{\Delta K}_f = \hat{\Delta K}_f - \Delta K_{f,\text{true}}$ 时，计算残余偏航干扰力矩：
+   $$\delta T_\alpha = -\frac{L_e}{4}(i_L - i_R)\tilde{\Delta K}_f$$
+   计算标定前后偏航静态力矩偏差抑制比与偏航角改善理论值。
 
 
 

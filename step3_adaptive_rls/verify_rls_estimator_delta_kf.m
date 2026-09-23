@@ -419,7 +419,8 @@ function verify_rls_estimator_delta_kf()
             end
         end
     end
-    fprintf('  >>> Test E 结构参数误差敏感性测试: PASS (已分离记录投影截断状态)！\n\n');
+    fprintf('  >>> Test E 结构参数误差敏感性测试: PASS_WITH_CLIPPING\n');
+    fprintf('      (敏感性识别: 11 工况 PASS, 1 工况 IDENTIFICATION_CLIPPED; 投影安全机制: PASS)！\n\n');
     
     %% =====================================================================
     %% Test F: 越界投影与协方差稳定性测试 (物理边界与对称边界)
@@ -473,7 +474,7 @@ function verify_rls_estimator_delta_kf()
     assert(abs(info_f1_neg.theta_projected - opts_base.theta_min) < 1e-12, '投影截断未能精确限制在物理下界！');
     assert(isfinite(info_f1_neg.theta_projected), '投影输出存在非有限值！');
     assert(isfinite(info_f1_neg.P_next), 'F2 负向冲击后协方差必须为有限值！');
-    assert(info_f1_neg.P_next >= opts_base.P_min && info_f1_neg.P_next <= opts_base.P_max, 'F2 协方差越界！');
+    assert(info_f1_neg.P_next >= opts_base.P_min && info_f1_neg.P_next <= opts_base.P_max, '协方差越界！');
     
     % F3: 持续零 PE 静止段协方差风积检验 (lambda = 0.98 遗忘测试)
     opts_forget = opts_base;
@@ -525,6 +526,6 @@ function verify_rls_estimator_delta_kf()
     fclose(fid);
     fprintf('>>> Phase 1 结构化量化评测指标已成功导出至: %s\n', csv_file);
     fprintf('=========================================================================\n');
-    fprintf('          STEP 3B PHASE 1 全套基准测试执行完毕 (各项测试全部 PASS)        \n');
+    fprintf('   STEP 3B PHASE 1 全套基准测试执行完毕 (Test A-D, F: PASS; Test E: PASS_WITH_CLIPPING)   \n');
     fprintf('=========================================================================\n');
 end
