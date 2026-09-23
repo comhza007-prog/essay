@@ -52,9 +52,12 @@ function calib = step3b_offline_calibration(Delta_Kf_hat, Kf_mean, opts)
 end
 
 function ok = calib_in_bounds(r, opts)
-    r_min = 0.5;
-    r_max = 2.0;
+    % 默认对应 Phase 1 声明的物理允许区间 r in [0.65, 1.35] (含数值容限 1e-4)
+    r_min = 0.65;
+    r_max = 1.35;
+    tol = 1e-4;
     if isfield(opts, 'r_min'), r_min = opts.r_min; end
     if isfield(opts, 'r_max'), r_max = opts.r_max; end
-    ok = (r >= r_min && r <= r_max);
+    if isfield(opts, 'tol'),   tol   = opts.tol;   end
+    ok = (r >= (r_min - tol) && r <= (r_max + tol));
 end

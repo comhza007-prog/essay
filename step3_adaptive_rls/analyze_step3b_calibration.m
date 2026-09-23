@@ -68,14 +68,24 @@ function res = analyze_step3b_calibration(dataset, calib, Imax, current_scale)
     T_alpha_comp_unsat = -0.5 * Le * (Kf_L * iL_comp_cmd + Kf_R * iR_comp_cmd);
     e_T_comp_unsat = T_alpha_comp_unsat - T_alpha_nom;
     
-    % 4. 饱和状态逐点统计
-    sat_mask_L = (abs(iL_comp_cmd) >= Imax);
-    sat_mask_R = (abs(iR_comp_cmd) >= Imax);
-    sat_mask_total = (sat_mask_L | sat_mask_R);
+    % 4. 饱和状态逐点统计 (严格解耦基线名义支路与补偿后命令支路)
+    % 4.1 基线支路饱和统计 (名义未补偿指令是否触及 Imax)
+    base_sat_mask_L = (abs(iL_nom) >= Imax);
+    base_sat_mask_R = (abs(iR_nom) >= Imax);
+    base_sat_mask_total = (base_sat_mask_L | base_sat_mask_R);
     
-    sat_ratio_L = mean(sat_mask_L) * 100.0;
-    sat_ratio_R = mean(sat_mask_R) * 100.0;
-    sat_ratio_total = mean(sat_mask_total) * 100.0;
+    base_sat_ratio_L = mean(base_sat_mask_L) * 100.0;
+    base_sat_ratio_R = mean(base_sat_mask_R) * 100.0;
+    base_sat_ratio_total = mean(base_sat_mask_total) * 100.0;
+    
+    % 4.2 补偿支路饱和统计 (经增益缩放后的补偿指令是否触及 Imax)
+    comp_sat_mask_L = (abs(iL_comp_cmd) >= Imax);
+    comp_sat_mask_R = (abs(iR_comp_cmd) >= Imax);
+    comp_sat_mask_total = (comp_sat_mask_L | comp_sat_mask_R);
+    
+    comp_sat_ratio_L = mean(comp_sat_mask_L) * 100.0;
+    comp_sat_ratio_R = mean(comp_sat_mask_R) * 100.0;
+    comp_sat_ratio_total = mean(comp_sat_mask_total) * 100.0;
     
     % 5. 严格时间窗口掩码
     mask_eval = (t >= 0.5 & t <= 2.3);    % 强激励主评测窗口
@@ -136,9 +146,16 @@ function res = analyze_step3b_calibration(dataset, calib, Imax, current_scale)
     res.eta_sat              = eta_sat;
     res.eta_unsat            = eta_unsat;
     res.suppression_status   = suppression_status;
-    res.sat_ratio_L          = sat_ratio_L;
-    res.sat_ratio_R          = sat_ratio_R;
-    res.sat_ratio_total      = sat_ratio_total;
+    res.base_sat_ratio_L     = base_sat_ratio_L;
+    res.base_sat_ratio_R     = base_sat_ratio_R;
+    res.base_sat_ratio_total = base_sat_ratio_total;
+    res.comp_sat_ratio_L     = comp_sat_ratio_L;
+    res.comp_sat_ratio_R     = comp_sat_ratio_R;
+    res.comp_sat_ratio_total = comp_sat_ratio_total;
+    % 兼容别名
+    res.sat_ratio_L          = comp_sat_ratio_L;
+    res.sat_ratio_R          = comp_sat_ratio_R;
+    res.sat_ratio_total      = comp_sat_ratio_total;
     res.IL_rms_before        = IL_rms_before;
     res.IR_rms_before        = IR_rms_before;
     res.IL_rms_after         = IL_rms_after;
