@@ -23,11 +23,11 @@ function [x_next, details] = gantry_dynamics_step_step3b(x, iL_cmd, iR_cmd, mech
         delta_m = 0.0;
     end
 
-    % 四阶龙格-库塔 (RK4)
-    [k1, d1] = gantry_dynamics_deriv_step3b(x, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
-    k2 = gantry_dynamics_deriv_step3b(x + 0.5 * dt * k1, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
-    k3 = gantry_dynamics_deriv_step3b(x + 0.5 * dt * k2, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
-    k4 = gantry_dynamics_deriv_step3b(x + dt * k3, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
+    % 四阶龙格-库塔 (RK4) - 统一调用公共底层动力学微分核 gantry_dynamics_deriv
+    [k1, d1] = gantry_dynamics_deriv(x, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
+    [k2, ~]  = gantry_dynamics_deriv(x + 0.5 * dt * k1, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
+    [k3, ~]  = gantry_dynamics_deriv(x + 0.5 * dt * k2, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
+    [k4, ~]  = gantry_dynamics_deriv(x + dt * k3, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, Kf_L, Kf_R);
     
     x_next = x + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
     if nargout > 1

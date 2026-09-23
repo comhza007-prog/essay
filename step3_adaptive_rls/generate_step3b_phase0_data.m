@@ -100,25 +100,32 @@ function generate_step3b_phase0_data()
             x = x_next;
         end
         
-        % 显式重构左右物理传感器通道
-        yL = yG_hist - 0.5 * Le * alpha_hist;
-        yR = yG_hist + 0.5 * Le * alpha_hist;
-        vL = yG_dot_hist - 0.5 * Le * alpha_dot_hist;
-        vR = yG_dot_hist + 0.5 * Le * alpha_dot_hist;
+        % 显式重构左右物理传感器理想连续通道
+        yL_ideal = yG_hist - 0.5 * Le * alpha_hist;
+        yR_ideal = yG_hist + 0.5 * Le * alpha_hist;
+        vL_ideal = yG_dot_hist - 0.5 * Le * alpha_dot_hist;
+        vR_ideal = yG_dot_hist + 0.5 * Le * alpha_dot_hist;
         
-        yG         = yG_hist;
-        alpha      = alpha_hist;
-        alpha_dot  = alpha_dot_hist;
-        alpha_ddot = alpha_ddot_hist;
+        % Phase 0: 引入编码器量化测量 (分辨率 q_y = 1.21e-6 m)，暂不加入随机测量噪声
+        q_y = 1.21e-6;     % 线位移量化分辨率 (m)
+        rng(20260923);     % 固定随机种子保证可复现
+        yL_quant = q_y * round(yL_ideal / q_y);
+        yR_quant = q_y * round(yR_ideal / q_y);
+        
+        % 动力学真实值 (仅作为误差对照基准，严禁作为传感器辨识输入)
+        alpha_true      = alpha_hist;
+        alpha_dot_true  = alpha_dot_hist;
+        alpha_ddot_true = alpha_ddot_hist;
+        T_fric_true     = T_fric_hist;
         
         % 几何一致性断言
-        assert(max(abs(yG - 0.5 * (yL + yR))) < 1e-12, 'yG 左右合成一致性检验失败');
-        assert(max(abs(alpha - (yR - yL) / Le)) < 1e-12, 'alpha 左右合成一致性检验失败');
+        assert(max(abs(yG_hist - 0.5 * (yL_ideal + yR_ideal))) < 1e-12, 'yG 左右合成一致性检验失败');
+        assert(max(abs(alpha_true - (yR_ideal - yL_ideal) / Le)) < 1e-12, 'alpha 左右合成一致性检验失败');
         
         % 构造严格回归基底与可测输出 (Phase 0: d = 0, delta_m = 0)
         phi_Delta_T = 0.25 * Le * (iL_actual - iR_actual); % [count*m]
-        T_req = mech.J_alpha_nom * alpha_ddot + plant.B_alpha * alpha_dot ...
-                + plant.K_alpha * alpha + T_fric_hist;
+        T_req = mech.J_alpha_nom * alpha_ddot_true + plant.B_alpha * alpha_dot_true ...
+                + plant.K_alpha * alpha_true + T_fric_true;
         y_Delta_T = -T_req - 0.5 * Le * Kf_mean * (iL_actual + iR_actual); % [N*m]
         
         % 独立代数残差检验
@@ -140,22 +147,35 @@ function generate_step3b_phase0_data()
         data_step3b.mech          = mech;
         data_step3b.plant         = plant;
         
-        % 左右传感器通道与状态
-        data_step3b.yL         = yL;
-        data_step3b.yR         = yR;
-        data_step3b.vL         = vL;
-        data_step3b.vR         = vR;
-        data_step3b.yG         = yG;
-        data_step3b.alpha      = alpha;
-        data_step3b.alpha_dot  = alpha_dot;
-        data_step3b.alpha_ddot = alpha_ddot;
+        % 理想与量化传感器通道
+        data_step3b.yL_ideal = yL_ideal;
+        data_step3b.yR_ideal = yR_ideal;
+        data_step3b.yL_quant = yL_quant;
+        data_step3b.yR_quant = yR_quant;
+        data_step3b.q_y      = q_y;
         
-        % 实际执行电流与回归变量
+        % 动力学真实值 (仅用于对照，严禁直接接入回归)
+        data_step3b.alpha_true      = alpha_true;
+        data_step3b.alpha_dot_true  = alpha_dot_true;
+        data_step3b.alpha_ddot_true = alpha_ddot_true;
+        data_step3b.T_fric_true     = T_fric_true;
+        
+        % 向下兼容通用字段
+        data_step3b.yL         = yL_ideal;
+        data_step3b.yR         = yR_ideal;
+        data_step3b.vL         = vL_ideal;
+        data_step3b.vR         = vR_ideal;
+        data_step3b.yG         = yG_hist;
+        data_step3b.alpha      = alpha_true;
+        data_step3b.alpha_dot  = alpha_dot_true;
+        data_step3b.alpha_ddot = alpha_ddot_true;
+        data_step3b.T_fric     = T_fric_true;
+        
+        % 实际执行电流与理论回归基底
         data_step3b.iL_actual   = iL_actual;
         data_step3b.iR_actual   = iR_actual;
         data_step3b.phi_Delta_T = phi_Delta_T;
         data_step3b.y_Delta_T   = y_Delta_T;
-        data_step3b.T_fric      = T_fric_hist;
         
         save_file = fullfile(script_dir, sprintf('data_step3b_phase0_%s.mat', case_tag));
         save(save_file, '-struct', 'data_step3b');

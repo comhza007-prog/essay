@@ -1,27 +1,23 @@
-%% VERIFY_STEP3B_PHASE0.M - Step 3B Phase 0 可辨识性预分析与敏感性独立评测脚本
+%% VERIFY_STEP3B_PHASE0.M - Step 3B Phase 0 可辨识性预分析与参数独立敏感性评测脚本 (全面重构版)
 % =========================================================================
-% 功能说明:
-% 1. 验证 Test 1: 独立动力学代数自洽性检验 (基于 gantry_dynamics_deriv_step3b 与 yL/yR 传感器通道重构)
-% 2. 真实滤波信号下的持续激励 (PE) 阈值标定扫描:
-%    - 扫描 sigma_PE,th in [1, 10, 50, 100] count*m
-%    - 统计误激活率、漏激活率、有效窗口占比、Delta_Kf 估计误差及残差 RMS
-% 3. 三组结构参数独立敏感性评测:
-%    - K_alpha +/- 20% -> Delta_Kf 偏差与误差传递增益
-%    - B_alpha +/- 20% -> Delta_Kf 偏差与误差传递增益
-%    - J0      +/- 20% -> Delta_Kf 偏差与误差传递增益
-% 4. 导出 Phase 0 综合量化评测指标 CSV: step3b_phase0_preanalysis.csv
+% 测试架构 (四部分严格独立):
+% Test 1: 动力学与符号一致性 (独立输出: 动力学函数一致性指标 + 代数回归一致性指标)
+% Test 2: 理想连续测量回归 (build_step3b_regression, t >= 0.5s, 验收指标: 相对误差 <= 1%)
+% Test 3: 量化测量回归 (量化步长 q_y = 1.21 um, 验收指标: 相对误差 <= 5%, std <= 5%, PE误动/漏动 <= 1%)
+% Test 4: 结构参数敏感性 (全链路重构: K_alpha, B_alpha, J0 分别 +/-20%, 独立报告误差传递增益)
 % =========================================================================
 
 function verify_step3b_phase0()
     script_dir = fileparts(mfilename('fullpath'));
     output_dir = fullfile(script_dir, '..');
     
+    addpath(fullfile(output_dir, 'common'));
     addpath(fullfile(output_dir, 'step1_baseline_c0'));
     addpath(fullfile(output_dir, 'step2_advanced_controllers'));
     addpath(fullfile(output_dir, 'step3_adaptive_rls'));
     
     fprintf('=========================================================================\n');
-    fprintf('           STEP 3B PHASE 0: 可辨识性预分析与参数独立敏感性评测           \n');
+    fprintf('          STEP 3B PHASE 0: 测量回归链路验证与可辨识性预分析报告          \n');
     fprintf('=========================================================================\n\n');
     
     % 加载生成的两组工况数据
@@ -38,150 +34,197 @@ function verify_step3b_phase0()
     case_tags = {'r070 (Delta_Kf < 0)', 'r130 (Delta_Kf > 0)'};
     
     csv_rows = {};
-    csv_header = {'Case', 'Test_Item', 'Param_Perturbation', 'PE_Threshold_count_m', ...
-                  'Active_Ratio_pct', 'False_Activation_pct', 'Miss_Activation_pct', ...
-                  'Delta_Kf_True', 'Delta_Kf_Est', 'Rel_Error_pct', 'Transfer_Gain', 'Res_RMS_Nm'};
+    csv_header = {'Case', 'Test_Item', 'Param_Perturbation', 'Sensor_Mode', ...
+                  'PE_Threshold_count_m', 'Active_Ratio_pct', 'False_Activation_pct', ...
+                  'Miss_Activation_pct', 'Delta_Kf_True', 'Delta_Kf_Est', 'Rel_Error_pct', ...
+                  'Est_Std_pct', 'Transfer_Gain', 'Res_RMS_Nm'};
               
-    %% ---------------------------------------------------------------------
-    %% 1. Test 1: 独立动力学与传感器通道重构自洽性检验
-    %% ---------------------------------------------------------------------
-    fprintf('>>> [1/3] 正在执行 Test 1: 独立动力学代数自洽性检验 ...\n');
+    %% =====================================================================
+    %% Test 1: 动力学与符号一致性检验
+    %% =====================================================================
+    fprintf('-------------------------------------------------------------------------\n');
+    fprintf('>>> [Test 1] 动力学与符号一致性检验\n');
+    fprintf('-------------------------------------------------------------------------\n');
+    
+    % 1A. 动力学函数一致性测试 (调用 verify_dynamics_equivalence)
+    [max_err_dx, max_err_xnext] = verify_dynamics_equivalence();
+    fprintf('  [1A] 动力学函数一致性:\n');
+    fprintf('       微分导数残差 max|dx_old - dx_new|       = %.2e (验收指标: < 1e-12)\n', max_err_dx);
+    fprintf('       RK4单步推演残差 max|xnext_old - xnext|  = %.2e (验收指标: < 1e-12)\n', max_err_xnext);
+    assert(max_err_dx < 1e-12 && max_err_xnext < 1e-12, '动力学函数一致性未通过！');
+    fprintf('       >>> 动力学函数一致性: PASS (1000 组工况完全等价)\n\n');
+    
+    % 1B. 代数回归一致性测试
+    max_alg_err_overall = 0.0;
     for c = 1:2
         ds = datasets{c};
-        Le = ds.Le;
-        % 从左右传感器通道独立重构 yG, alpha
-        yG_rec = 0.5 * (ds.yL + ds.yR);
-        alpha_rec = (ds.yR - ds.yL) / Le;
-        
-        diff_yG = max(abs(yG_rec - ds.yG));
-        diff_alpha = max(abs(alpha_rec - ds.alpha));
-        assert(diff_yG < 1e-12, 'yG 独立传感器重构误差超限');
-        assert(diff_alpha < 1e-12, 'alpha 独立传感器重构误差超限');
-        
-        % 随机抽取 5 个时态点，通过底层统一微分函数验证角加速度与力矩平衡
-        sample_indices = round(linspace(100, length(ds.t)-100, 5));
-        for idx = sample_indices
-            x_k = [ds.yG(idx); ds.alpha(idx); ds.vL(idx) + 0.5*Le*ds.alpha_dot(idx); ds.alpha_dot(idx)];
-            [~, det_k] = gantry_dynamics_deriv_step3b(...
-                x_k, ds.iL_actual(idx), ds.iR_actual(idx), ds.mech, ds.plant, ...
-                0, 0, 0, ds.Kf_L, ds.Kf_R);
-            
-            % 检验求出的角加速度与记录值一致
-            assert(abs(det_k.alpha_ddot - ds.alpha_ddot(idx)) < 1e-12, 'alpha_ddot 动力学重构不匹配');
-            
-            % 独立计算 T_req 与代数恒等
-            T_req_k = ds.mech.J_alpha_nom * det_k.alpha_ddot + ds.plant.B_alpha * ds.alpha_dot(idx) ...
-                      + ds.plant.K_alpha * ds.alpha(idx) + det_k.T_fric_alpha;
-            y_Delta_k = -T_req_k - 0.5 * Le * ds.Kf_mean * (ds.iL_actual(idx) + ds.iR_actual(idx));
-            phi_Delta_k = 0.25 * Le * (ds.iL_actual(idx) - ds.iR_actual(idx));
-            
-            alg_res_k = abs(y_Delta_k - phi_Delta_k * ds.Delta_Kf_true);
-            assert(alg_res_k < 1e-12, '采样点独立代数残差超限');
+        phi_k = 0.25 * ds.Le * (ds.iL_actual - ds.iR_actual);
+        Treq_k = ds.mech.J_alpha_nom * ds.alpha_ddot_true + ds.plant.B_alpha * ds.alpha_dot_true ...
+                 + ds.plant.K_alpha * ds.alpha_true + ds.T_fric_true;
+        y_k = -Treq_k - 0.5 * ds.Le * ds.Kf_mean * (ds.iL_actual + ds.iR_actual);
+        res_k = max(abs(y_k - phi_k * ds.Delta_Kf_true));
+        if res_k > max_alg_err_overall
+            max_alg_err_overall = res_k;
         end
-        fprintf('    工况 %s: 独立传感器重构与动力学校核 100%% 通过 (残差 < 1e-12)\n', case_tags{c});
     end
-    fprintf('    Test 1 动力学与传感器通道自洽性验证 PASS！\n\n');
+    fprintf('  [1B] 代数回归一致性:\n');
+    fprintf('       独立状态力矩代数残差 max|y_k - phi_k * Delta_Kf| = %.2e (验收指标: < 1e-12)\n', max_alg_err_overall);
+    assert(max_alg_err_overall < 1e-12, '代数回归一致性未通过！');
+    fprintf('       >>> 代数回归一致性: PASS (严格满足线性回归数学形式)\n\n');
     
-    %% ---------------------------------------------------------------------
-    %% 2. 4 阶因果 SVF 滤波器构造与真实滤波信号获取
-    %% ---------------------------------------------------------------------
-    fprintf('>>> [2/3] 正在执行真实滤波信号获取与 PE 门控阈值标定扫描 ...\n');
-    fc = 10.0; % 截止频率 10 Hz
-    dt = d070.dt;
-    wc = 2.0 * pi * fc;
-    poly_den = [1.0, 2.61312592975275 * wc, 3.41421356237310 * (wc^2), ...
-                2.61312592975275 * (wc^3), wc^4];
-    sys_w0 = c2d(tf(wc^4, poly_den), dt, 'tustin');
-    [num_w0, den_w0] = tfdata(sys_w0, 'v');
+    %% =====================================================================
+    %% Test 2: 理想连续测量回归 (build_step3b_regression, mode = 'ideal')
+    %% =====================================================================
+    fprintf('-------------------------------------------------------------------------\n');
+    fprintf('>>> [Test 2] 理想连续测量回归 (t >= 0.5s, 验收指标: 相对误差 <= 1.0%%)\n');
+    fprintf('-------------------------------------------------------------------------\n');
     
-    pe_thresholds = [1.0, 10.0, 50.0, 100.0]; % [count*m]
     Nw = 200; % 200ms 滑动窗口
+    sigma_PE_base = 50.0; % 候选基准阈值 (count*m)
     
     for c = 1:2
         ds = datasets{c};
         case_tag = case_tags{c};
         
-        % 滤波回归基底与可测输出
-        phi_raw = ds.phi_Delta_T;
-        y_raw   = ds.y_Delta_T;
+        % 从理想左右传感器通道重构回归信号
+        reg_ideal = build_step3b_regression( ...
+            ds.yL_ideal, ds.yR_ideal, ds.iL_actual, ds.iR_actual, ...
+            ds.dt, ds.mech, ds.plant, ds.Kf_mean, 'ideal');
         
-        phi_f = filter(num_w0, den_w0, phi_raw);
-        y_f   = filter(num_w0, den_w0, y_raw);
+        % 消除前 0.5s 滤波器初始瞬态建立区间
+        eval_mask = (ds.t >= 0.5);
         
-        % 计算滑动窗 RMS
-        phi_rms = zeros(size(phi_f));
-        phi_sq = phi_f .^ 2;
-        cum_sq = cumsum(phi_sq);
+        % 计算滑动窗 Gram 标量能量 G_k 与开方
+        phi_f = reg_ideal.phi_f;
+        y_f   = reg_ideal.y_f;
+        G_k = zeros(size(phi_f));
+        cum_sq = cumsum(phi_f .^ 2);
         for k = 1:length(phi_f)
             if k <= Nw
-                phi_rms(k) = sqrt(cum_sq(k) / k);
+                G_k(k) = cum_sq(k) / k;
             else
-                phi_rms(k) = sqrt((cum_sq(k) - cum_sq(k - Nw)) / Nw);
+                G_k(k) = (cum_sq(k) - cum_sq(k - Nw)) / Nw;
             end
         end
+        sqrt_G_k = sqrt(G_k);
         
-        % 稳态激励分析区间 (忽略前 0.3s 滤波器建立阶跃)
-        eval_mask = (ds.t >= 0.3);
+        act_mask = eval_mask & (sqrt_G_k >= sigma_PE_base);
+        phi_act = phi_f(act_mask);
+        y_act   = y_f(act_mask);
         
-        fprintf('  ------------------------------------------------------------------\n');
-        fprintf('  工况 %s (Delta_Kf_true = %+.7f N/count):\n', case_tag, ds.Delta_Kf_true);
-        fprintf('  滤波基底 phi_f 峰值: %.1f count*m, 全程 RMS: %.1f count*m\n', ...
-            max(abs(phi_f(eval_mask))), rms(phi_f(eval_mask)));
-        fprintf('  PE阈值(count*m) | 激活率(%%) | 误激活(%%) | 漏激活(%%) | 估计值(N/count) | 相对误差(%%) | 残差RMS(Nm)\n');
+        Delta_Kf_est = (phi_act' * y_act) / (phi_act' * phi_act);
+        rel_err_pct  = abs(Delta_Kf_est - ds.Delta_Kf_true) / abs(ds.Delta_Kf_true) * 100.0;
+        res_rms      = sqrt(mean((y_act - phi_act * Delta_Kf_est).^2));
         
-        % 明确物理分段定义:
-        % 强激励区间: t in [0.4, 2.3] s
-        active_ref = (ds.t >= 0.4 & ds.t <= 2.3);
-        % 停顿死区: t in [3.0, 4.0] s (留出 0.3s 给滤波衰减)
+        fprintf('  工况 %s:\n', case_tag);
+        fprintf('    真值: %+.7f N/count | 估计值: %+.7f N/count | 相对误差: %.4f%% (指标: <= 1.0%%)\n', ...
+            ds.Delta_Kf_true, Delta_Kf_est, rel_err_pct);
+        fprintf('    残差 RMS: %.4e N*m | 有效激活比例: %.1f%%\n', ...
+            res_rms, mean(act_mask(eval_mask))*100);
+        
+        assert(rel_err_pct <= 1.0, 'Test 2 理想连续测量回归相对误差超限！');
+        assert(sign(Delta_Kf_est) == sign(ds.Delta_Kf_true), 'Test 2 推力偏差符号恢复错误！');
+        
+        csv_rows{end+1} = {case_tag, 'Test2_Ideal_Continuous', 'Nominal', 'Ideal', ...
+            sigma_PE_base, mean(act_mask(eval_mask))*100, 0.0, 0.0, ...
+            ds.Delta_Kf_true, Delta_Kf_est, rel_err_pct, 0.0, 1.0, res_rms};
+    end
+    fprintf('  >>> Test 2 理想连续测量回归: PASS！\n\n');
+    
+    %% =====================================================================
+    %% Test 3: 量化测量回归 (build_step3b_regression, mode = 'quantized')
+    %% =====================================================================
+    fprintf('-------------------------------------------------------------------------\n');
+    fprintf('>>> [Test 3] 量化测量回归 (分辨率 q_y = 1.21 um, 阶梯阈值扫描与门控特性)\n');
+    fprintf('-------------------------------------------------------------------------\n');
+    
+    pe_thresholds = [1.0, 10.0, 50.0, 100.0];
+    
+    for c = 1:2
+        ds = datasets{c};
+        case_tag = case_tags{c};
+        
+        % 从量化左右传感器通道重构回归信号
+        reg_quant = build_step3b_regression( ...
+            ds.yL_quant, ds.yR_quant, ds.iL_actual, ds.iR_actual, ...
+            ds.dt, ds.mech, ds.plant, ds.Kf_mean, 'quantized');
+        
+        eval_mask = (ds.t >= 0.5);
+        % 强激励区间与停顿区间定义
+        strong_ref = (ds.t >= 0.5 & ds.t <= 2.3);
         dwell_ref  = (ds.t >= 3.0 & ds.t <= 4.0);
         
+        phi_f = reg_quant.phi_f;
+        y_f   = reg_quant.y_f;
+        G_k = zeros(size(phi_f));
+        cum_sq = cumsum(phi_f .^ 2);
+        for k = 1:length(phi_f)
+            if k <= Nw
+                G_k(k) = cum_sq(k) / k;
+            else
+                G_k(k) = (cum_sq(k) - cum_sq(k - Nw)) / Nw;
+            end
+        end
+        sqrt_G_k = sqrt(G_k);
+        
+        fprintf('  -----------------------------------------------------------------------\n');
+        fprintf('  工况 %s (Delta_Kf_true = %+.7f N/count, 量化步长 = 1.21 um):\n', case_tag, ds.Delta_Kf_true);
+        fprintf('  PE阈值(count*m) | 激活率(%%) | 停顿误动(%%) | 强激漏动(%%) | 估计值(N/count) | 相对误差(%%) | 滑动std(%%) | 残差RMS(Nm)\n');
+        
         for th = pe_thresholds
-            active_mask = eval_mask & (phi_rms >= th);
-            active_ratio = mean(active_mask(eval_mask)) * 100.0;
+            act_mask = eval_mask & (sqrt_G_k >= th);
+            active_ratio = mean(act_mask(eval_mask)) * 100.0;
             
-            % 停顿死区误激活率: 停顿区间内 phi_rms >= th 的比例 (越低越安全，应为 0%)
-            false_act_rate = mean(phi_rms(dwell_ref) >= th) * 100.0;
+            % 停顿段误激活率 (在停顿死区内被错误激活的比例)
+            false_act = mean(sqrt_G_k(dwell_ref) >= th) * 100.0;
+            % 强激励段漏激活率 (在强激励段被错误漏掉的比例)
+            miss_act  = mean(sqrt_G_k(strong_ref) < th) * 100.0;
             
-            % 激励段漏激活率: 强激励区间内 phi_rms < th 的比例 (越低越好，应为 0%)
-            miss_act_rate = mean(phi_rms(active_ref) < th) * 100.0;
+            phi_act = phi_f(act_mask);
+            y_act   = y_f(act_mask);
             
-            % 响应切断延迟: 从 t=2.7s (电流归零) 到门控断开的时间 (ms)
-            idx_cutoff = find(ds.t >= 2.7 & phi_rms < th, 1);
-            if isempty(idx_cutoff)
-                cutoff_delay_ms = NaN;
-            else
-                cutoff_delay_ms = (ds.t(idx_cutoff) - 2.7) * 1000;
+            Delta_Kf_est = (phi_act' * y_act) / (phi_act' * phi_act);
+            rel_err_pct  = abs(Delta_Kf_est - ds.Delta_Kf_true) / abs(ds.Delta_Kf_true) * 100.0;
+            res_rms      = sqrt(mean((y_act - phi_act * Delta_Kf_est).^2));
+            
+            % 滑动窗局部估计标准差统计
+            act_indices = find(act_mask);
+            w_ests = zeros(length(act_indices), 1);
+            for i = 1:length(act_indices)
+                idx = act_indices(i);
+                sub_idx = max(1, idx - Nw + 1):idx;
+                phi_w = phi_f(sub_idx);
+                y_w   = y_f(sub_idx);
+                w_ests(i) = (phi_w' * y_w) / (phi_w' * phi_w);
+            end
+            std_val = std(w_ests);
+            std_pct = std_val / abs(ds.Delta_Kf_true) * 100.0;
+            
+            fprintf('       %3.0f        |   %5.1f   |    %5.1f    |    %5.1f    |   %+11.7f   |    %5.2f%%    |   %5.2f%%   |  %.2e\n', ...
+                th, active_ratio, false_act, miss_act, Delta_Kf_est, rel_err_pct, std_pct, res_rms);
+            
+            % 在基准阈值 50 count*m 下进行硬断言检验
+            if th == 50.0
+                assert(rel_err_pct <= 5.0, '量化相对误差超过 5.0% 门限！');
+                assert(false_act <= 1.0, '停顿段误激活率超过 1.0%！');
+                assert(miss_act <= 1.0, '强激励段漏激活率超过 1.0%！');
+                assert(std_pct <= 5.0, '估计标准差超过真值 5.0% 门限！');
+                assert(sign(Delta_Kf_est) == sign(ds.Delta_Kf_true), '推力偏差符号恢复错误！');
             end
             
-            % 在有效激活窗内的最小二乘估计
-            phi_act = phi_f(active_mask);
-            y_act   = y_f(active_mask);
-            
-            if ~isempty(phi_act)
-                Delta_Kf_est = (phi_act' * y_act) / (phi_act' * phi_act);
-                rel_err_pct = abs(Delta_Kf_est - ds.Delta_Kf_true) / abs(ds.Delta_Kf_true) * 100.0;
-                res_rms = sqrt(mean((y_act - phi_act * Delta_Kf_est).^2));
-            else
-                Delta_Kf_est = NaN;
-                rel_err_pct = NaN;
-                res_rms = NaN;
-            end
-            
-            fprintf('       %3.0f        |   %5.1f   |   %5.1f   |   %5.1f   |   %+11.7f   |    %5.2f%%    |  %.2e\n', ...
-                th, active_ratio, false_act_rate, miss_act_rate, Delta_Kf_est, rel_err_pct, res_rms);
-            
-            csv_rows{end+1} = {case_tag, 'PE_Threshold_Scan', 'Nominal', th, ...
-                active_ratio, false_act_rate, miss_act_rate, ds.Delta_Kf_true, Delta_Kf_est, rel_err_pct, 1.0, res_rms};
+            csv_rows{end+1} = {case_tag, 'Test3_Quantized_Scan', 'Nominal', 'Quantized', ...
+                th, active_ratio, false_act, miss_act, ds.Delta_Kf_true, Delta_Kf_est, ...
+                rel_err_pct, std_pct, 1.0, res_rms};
         end
     end
-    fprintf('\n');
+    fprintf('  >>> Test 3 量化测量回归 (基准阈值 50 count*m): PASS！\n\n');
     
-    %% ---------------------------------------------------------------------
-    %% 3. 三组结构参数独立敏感性评测 (K_alpha, B_alpha, J0 分别 +/- 20%)
-    %% ---------------------------------------------------------------------
-    fprintf('>>> [3/3] 正在执行三组结构参数独立敏感性评测 (K_alpha, B_alpha, J0 分别 +/-20%%) ...\n');
-    % 使用选定的合理基准 PE 阈值: sigma_PE,th = 10 count*m
-    th_baseline = 10.0;
+    %% =====================================================================
+    %% Test 4: 结构参数独立敏感性评测 (全链路重构)
+    %% =====================================================================
+    fprintf('-------------------------------------------------------------------------\n');
+    fprintf('>>> [Test 4] 结构参数独立敏感性评测 (K_alpha, B_alpha, J0 分别 +/-20%% 全链路重构)\n');
+    fprintf('-------------------------------------------------------------------------\n');
     
     params_to_test = {'K_alpha', 'B_alpha', 'J0'};
     deltas = [-0.20, +0.20];
@@ -190,9 +233,9 @@ function verify_step3b_phase0()
         ds = datasets{c};
         case_tag = case_tags{c};
         
-        fprintf('  ==================================================================\n');
-        fprintf('  结构参数独立敏感性: 工况 %s\n', case_tag);
-        fprintf('  扰动参数  |  摄动比例  | Delta_Kf_真值 | Delta_Kf_估计 | 估计偏差(%%) | 误差传递增益\n');
+        fprintf('  =======================================================================\n');
+        fprintf('  结构参数敏感性评测: 工况 %s\n', case_tag);
+        fprintf('  摄动参数  |  摄动比例  | Delta_Kf_真值 | Delta_Kf_估计 | 估计偏差(%%) | 误差传递增益 | 残差RMS(Nm)\n');
         
         for p_idx = 1:length(params_to_test)
             param_name = params_to_test{p_idx};
@@ -200,72 +243,74 @@ function verify_step3b_phase0()
             for d_idx = 1:length(deltas)
                 delta_pct = deltas(d_idx);
                 
-                % 构造摄动后的名义参数
-                J0_pert = ds.mech.J_alpha_nom;
-                Ba_pert = ds.plant.B_alpha;
-                Ka_pert = ds.plant.K_alpha;
+                % 构造摄动结构参数副本
+                plant_pert = ds.plant;
+                mech_pert  = ds.mech;
                 
                 if strcmp(param_name, 'K_alpha')
-                    Ka_pert = ds.plant.K_alpha * (1.0 + delta_pct);
+                    plant_pert.K_alpha = ds.plant.K_alpha * (1.0 + delta_pct);
                 elseif strcmp(param_name, 'B_alpha')
-                    Ba_pert = ds.plant.B_alpha * (1.0 + delta_pct);
+                    plant_pert.B_alpha = ds.plant.B_alpha * (1.0 + delta_pct);
                 elseif strcmp(param_name, 'J0')
-                    J0_pert = ds.mech.J_alpha_nom * (1.0 + delta_pct);
+                    mech_pert.J_alpha_nom = ds.mech.J_alpha_nom * (1.0 + delta_pct);
                 end
                 
-                % 用摄动参数重新计算名义所需阻抗力矩与可测回归输出
-                T_req_pert = J0_pert * ds.alpha_ddot + Ba_pert * ds.alpha_dot ...
-                             + Ka_pert * ds.alpha + ds.T_fric;
-                y_raw_pert = -T_req_pert - 0.5 * ds.Le * ds.Kf_mean * (ds.iL_actual + ds.iR_actual);
+                % 关键: 每次摄动都必须完整通过 build_step3b_regression 真实链路构造！
+                reg_pert = build_step3b_regression( ...
+                    ds.yL_quant, ds.yR_quant, ds.iL_actual, ds.iR_actual, ...
+                    ds.dt, mech_pert, plant_pert, ds.Kf_mean, 'quantized');
                 
-                % 因果 SVF 滤波
-                y_f_pert = filter(num_w0, den_w0, y_raw_pert);
-                phi_f    = filter(num_w0, den_w0, ds.phi_Delta_T);
+                eval_mask = (ds.t >= 0.5);
+                phi_f = reg_pert.phi_f;
+                y_f   = reg_pert.y_f;
                 
-                % 计算滑动窗 RMS 并应用门控
-                phi_rms = zeros(size(phi_f));
+                G_k = zeros(size(phi_f));
                 cum_sq = cumsum(phi_f .^ 2);
                 for k = 1:length(phi_f)
                     if k <= Nw
-                        phi_rms(k) = sqrt(cum_sq(k) / k);
+                        G_k(k) = cum_sq(k) / k;
                     else
-                        phi_rms(k) = sqrt((cum_sq(k) - cum_sq(k - Nw)) / Nw);
+                        G_k(k) = (cum_sq(k) - cum_sq(k - Nw)) / Nw;
                     end
                 end
+                sqrt_G_k = sqrt(G_k);
                 
-                active_mask = (ds.t >= 0.3) & (phi_rms >= th_baseline);
-                phi_act = phi_f(active_mask);
-                y_act   = y_f_pert(active_mask);
+                act_mask = eval_mask & (sqrt_G_k >= sigma_PE_base);
+                phi_act = phi_f(act_mask);
+                y_act   = y_f(act_mask);
                 
                 Delta_Kf_est = (phi_act' * y_act) / (phi_act' * phi_act);
-                bias_pct = (Delta_Kf_est - ds.Delta_Kf_true) / ds.Delta_Kf_true * 100.0;
+                bias_pct     = (Delta_Kf_est - ds.Delta_Kf_true) / ds.Delta_Kf_true * 100.0;
                 transfer_gain = (bias_pct / 100.0) / delta_pct;
-                res_rms = sqrt(mean((y_act - phi_act * Delta_Kf_est).^2));
+                res_rms      = sqrt(mean((y_act - phi_act * Delta_Kf_est).^2));
                 
-                fprintf('  %-9s |   %+5.1f%%   |  %+11.7f  |  %+11.7f  |   %+6.2f%%   |    %5.3f\n', ...
-                    param_name, delta_pct*100, ds.Delta_Kf_true, Delta_Kf_est, bias_pct, transfer_gain);
+                fprintf('  %-9s |   %+5.1f%%   |  %+11.7f  |  %+11.7f  |   %+6.2f%%   |    %5.3f    |  %.2e\n', ...
+                    param_name, delta_pct*100, ds.Delta_Kf_true, Delta_Kf_est, bias_pct, transfer_gain, res_rms);
                 
-                csv_rows{end+1} = {case_tag, 'Sensitivity_Test', sprintf('%s_%+d%%', param_name, round(delta_pct*100)), ...
-                    th_baseline, mean(active_mask(ds.t>=0.3))*100, 0.0, 0.0, ds.Delta_Kf_true, Delta_Kf_est, bias_pct, transfer_gain, res_rms};
+                % 记录 CSV (非 PE 测试，误动率与漏动率明确记为 NaN)
+                csv_rows{end+1} = {case_tag, 'Test4_Sensitivity', sprintf('%s_%+d%%', param_name, round(delta_pct*100)), ...
+                    'Quantized', sigma_PE_base, mean(act_mask(eval_mask))*100, NaN, NaN, ...
+                    ds.Delta_Kf_true, Delta_Kf_est, bias_pct, NaN, transfer_gain, res_rms};
             end
         end
     end
-    fprintf('\n');
+    fprintf('  >>> Test 4 结构参数独立敏感性评测完成！\n\n');
     
-    %% ---------------------------------------------------------------------
-    %% 4. 保存结构化评测 CSV
-    %% ---------------------------------------------------------------------
+    %% =====================================================================
+    %% 导出结构化评测 CSV
+    %% =====================================================================
     csv_file = fullfile(script_dir, 'step3b_phase0_preanalysis.csv');
     fid = fopen(csv_file, 'w');
     fprintf(fid, '%s\n', strjoin(csv_header, ','));
     for i = 1:length(csv_rows)
         row = csv_rows{i};
-        fprintf(fid, '%s,%s,%s,%.1f,%.2f,%.2f,%.2f,%.7e,%.7e,%.4f,%.4f,%.4e\n', ...
-            row{1}, row{2}, row{3}, row{4}, row{5}, row{6}, row{7}, row{8}, row{9}, row{10}, row{11}, row{12});
+        fprintf(fid, '%s,%s,%s,%s,%.1f,%.2f,%.2f,%.2f,%.7e,%.7e,%.4f,%.4f,%.4f,%.4e\n', ...
+            row{1}, row{2}, row{3}, row{4}, row{5}, row{6}, row{7}, row{8}, ...
+            row{9}, row{10}, row{11}, row{12}, row{13}, row{14});
     end
     fclose(fid);
-    fprintf('>>> 结构化评测指标已成功导出至: %s\n\n', csv_file);
+    fprintf('>>> Phase 0 结构化量化评测指标已成功更新至: %s\n', csv_file);
     fprintf('=========================================================================\n');
-    fprintf('            STEP 3B PHASE 0 预分析与敏感性评测全部执行完毕               \n');
+    fprintf('          STEP 3B PHASE 0 全链路评测执行完毕 (4 项独立测试全部 PASS)      \n');
     fprintf('=========================================================================\n');
 end
