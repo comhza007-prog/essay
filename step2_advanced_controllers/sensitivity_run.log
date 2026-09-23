@@ -1,0 +1,32 @@
+========================================================================================
+        Step 2.6: 参数敏感性与工况拓展全面评测 (V2.1 审阅重构终极版)
+========================================================================================
+
+>>> 正在执行 维度 1A: 偏载质量扫描 (delta_m = 0.0 ~ 6.0 kg) ...
+>>> 正在执行 维度 1B: 偏心距扫描 (d = 0.00 ~ 0.30 m, 限制在半跨距内) ...
+>>> 正在执行 维度 2: 左右导轨摩擦非对称性扫描 (delta_fric = 0% ~ 70%) ...
+>>> 正在执行 维度 3: 执行器限流能力分级扫描 (Imax = 3500 ~ 16000 counts) ...
+>>> 正在执行 维度 4: 左右推力非对称扫描 (4A: 失配退化 vs 4B: 已知校准) ...
+>>> 正在执行 维度 5: 动态抗饱和参数网格扫描 (K_aw x lambda_aw, 含 Kaw=0 基准) ...
+>>> 正在执行 维度 6: 往返分段载荷工况 (Segmented Load Dwell Switch) ...
+Controller 1 at switch (t=3.30s): v=1.716648e-05, omega=4.302950e-05
+Controller 2 at switch (t=3.30s): v=5.676125e-04, omega=3.261607e-04
+Controller 3 at switch (t=3.30s): v=1.872148e-05, omega=4.572903e-05
+Controller 4 at switch (t=3.30s): v=6.091201e-04, omega=3.355879e-04
+Controller 5 at switch (t=3.30s): v=-2.972705e-03, omega=-6.278153e-04
+Controller 6 at switch (t=3.30s): v=-2.914188e-03, omega=-5.602147e-04
+
+[OK] 敏感性评测原始数据已存入 sensitivity_results.mat 与 sensitivity_summary.csv (共 156 条实验记录)
+[OK] CSV schema: 25 fields per record, 156 data rows
+[OK] Dim1A_EccentricMass: 20 records
+[OK] Dim1B_EccentricDist: 16 records
+[OK] Dim2_FrictionAsym: 20 records
+[OK] Dim3_ImaxEscalation: 24 records
+[OK] Dim4A_ThrustAsym_Blind: 20 records
+[OK] Dim4B_ThrustAsym_Matched: 20 records
+[OK] Dim5_AW_Tuning: 30 records
+[OK] Dim6_LoadTransfer: 6 records
+[OK] Markdown 表格已自动导出至 sensitivity_tables.md
+>>> 正在生成敏感性与工况拓展高分辨率学术图表 ...
+[OK] 所有学术图表已保存完成。
+

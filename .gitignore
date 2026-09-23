@@ -1,0 +1,18 @@
+# MATLAB
+*.asv
+*.m~
+*.slxc
+*.mex*
+*.tmp
+slprj/
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE
+.vscode/
+.idea/
+MathWorks/
+graphicsState.bin
