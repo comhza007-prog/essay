@@ -86,8 +86,12 @@ function [iL_cmd, iR_cmd, state_c3a, info] = controller_c3a_rls_robust( ...
     % 实际施加推力指令
     FG_applied = Kf_L * iL_cmd - Kf_R * iR_cmd;
     if nargin < 13 || isempty(yG_meas)
-        % 若未显式传入量化测量，默认根据 8192 线编码器当量进行物理量化
-        dy_ecd = 1.2109e-6; % 2*pi*rp / (N*8192)
+        % 若未显式传入量化测量，默认根据控制器配置或传动参数当量计算
+        if isfield(ctrl_c2, 'dy_ecd')
+            dy_ecd = ctrl_c2.dy_ecd;
+        else
+            dy_ecd = (2.0 * pi * 0.030) / (19.0 * 8192); % 2*pi*rp / (N * ecd_cpr)
+        end
         yG_meas = round(q(1) / dy_ecd) * dy_ecd;
     end
     

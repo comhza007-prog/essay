@@ -6,7 +6,7 @@
 % [Test 3] 300ms 滑动窗 Gram 矩阵数值对称性、初态保护与静止段绝对冻结断言
 % [Test 4] PE 门限敏感性扫描 (eps_PE in {1e-5, 1e-4, 1e-3})
 % [Test 5] 紧凑凸集物理投影边界截断与单步速率限制 (|ΔM| <= 0.010 kg/ms) 断言
-% [Test 6] 专用工况 (d=0, delta_fric=0) 开环质量阶跃估计收敛性 (3.5s返程起算，4.0s后稳态误差 <= 2%)
+% [Test 6] 专用工况 (d=0, delta_fric=0) 开环质量阶跃估计收敛性 (返程两段式正交解耦收敛，停稳评估窗口 (5.8~6.8s) 稳态误差 <= 2.0%)
 % [Test 7] C3a 自适应闭环控制器动态跟踪平稳性与控制量总变差 (TV <= 110% C2a) 断言
 % =========================================================================
 
@@ -39,6 +39,7 @@ ctrl_c2_base.eps_v = 0.01;
 ctrl_c2_base.eps_alpha = 0.01;
 ctrl_c2_base.I_fw_limit = 16000.0;
 ctrl_c2_base.enable_ff = true;
+ctrl_c2_base.dy_ecd = mech.dy_ecd;
 
 %% -------------------------------------------------------------------------
 %% [Test 1] 4 阶因果巴特沃斯 SVF 滤波频响稳定性与动态平衡残差衰减测试
@@ -186,7 +187,19 @@ for ep_i = 1:length(eps_list)
     assert(act_pct >= 10.0 && act_pct <= 60.0, 'PE 门限过于严苛或过于宽松！');
     assert(err_scan_pct <= 2.0, 'PE 门限扫描下最终质量估计误差超标！');
 end
-fprintf('  -> PASS: PE 门限扫描均能有效在加减速段开启、在匀速与静止段关闭，且各门限下质量误差 <= 2.0%%。\n\n');
+
+% 细致断言：名义门限 (eps_PE=1e-4) 下加减速窗口必须激活，匀速/静止窗口必须绝对冻结
+w_acc1 = (d3.t >= 0.30 & d3.t <= 0.40);
+w_acc2 = (d3.t >= 3.65 & d3.t <= 3.85);
+w_cru1 = (d3.t >= 0.60 & d3.t <= 1.40);
+w_cru2 = (d3.t >= 4.20 & d3.t <= 5.00);
+
+assert(mean(is_pe_hist(w_acc1)) > 0.50, '正向加速段 PE 未有效开启！');
+assert(mean(is_pe_hist(w_acc2)) > 0.50, '返程加速段 PE 未有效开启！');
+assert(mean(is_pe_hist(w_cru1)) == 0.00, '正向匀速段 PE 门控未完全冻结！');
+assert(mean(is_pe_hist(w_cru2)) == 0.00, '返程匀速段 PE 门控未完全冻结！');
+
+fprintf('  -> PASS: PE 门限扫描有效；加减速段激活率 100%%，匀速与静止段激活率严格为 0.00%%，质量误差 <= 2.0%%。\n\n');
 
 %% -------------------------------------------------------------------------
 %% [Test 5] 紧凑凸集物理投影边界截断与单步速率限制 (|ΔM| <= 0.010 kg/ms) 断言
@@ -319,12 +332,16 @@ max_delta_i_c2a = max([max(diL_c2a), max(diR_c2a)]);
 max_delta_i_c3a = max([max(diL_c3a), max(diR_c3a)]);
 delta_i_ratio_global = max_delta_i_c3a / max_delta_i_c2a;
 
-% 2. 平滑跟踪段最大单步电流突变 (排除轨迹加速度阶跃切换点，用于真实检验高频抖颤)
-diff_a_cmd = abs(diff(traj.yddot(:)));
-smooth_mask = (diff_a_cmd < 1e-4);
+% 2. 平滑跟踪段最大单步电流突变 (排除换向加速度跳变及其过渡段 ±100 ms，用于真实检验高频抖颤)
+step_pts = abs(diff(traj.yddot(:))) > 1e-4;
+transient_mask = conv(double(step_pts), ones(201, 1), 'same') > 0;
+smooth_mask = ~transient_mask;
+
 max_delta_i_smooth_c2a = max([max(diL_c2a(smooth_mask)), max(diR_c2a(smooth_mask))]);
 max_delta_i_smooth_c3a = max([max(diL_c3a(smooth_mask)), max(diR_c3a(smooth_mask))]);
 delta_i_ratio_smooth = max_delta_i_smooth_c3a / max_delta_i_smooth_c2a;
+rms_delta_i_smooth_c2a = sqrt(mean([diL_c2a(smooth_mask); diR_c2a(smooth_mask)].^2));
+rms_delta_i_smooth_c3a = sqrt(mean([diL_c3a(smooth_mask); diR_c3a(smooth_mask)].^2));
 
 % 跟踪误差比较 (严格时间对齐)
 rmse_c2a = sqrt(mean((d3.yG - traj.y(:)).^2)) * 1e3;
@@ -336,13 +353,15 @@ err_cl_rev_pct = abs(M_cl_rev_mean - 13.6) / 13.6 * 100.0;
 
 fprintf('   - 基线 C2a (固定名义参数): RMSE_yG = %.2f mm, TV = %.1f\n', rmse_c2a, tv_c2a);
 fprintf('     * 换向点单步电流突变 = %.1f counts (由名义质量 M_nom*a_max/2Kf 决定)\n', max_delta_i_c2a);
-fprintf('     * 平滑段单步最大变化 = %.1f counts\n', max_delta_i_smooth_c2a);
+fprintf('     * 平滑段单步最大变化 = %.2f counts\n', max_delta_i_smooth_c2a);
 fprintf('   - 提出 C3a (自适应 RLS 前馈): RMSE_yG = %.2f mm, TV = %.1f (TV 比值 = %.3f <= 1.10)\n', ...
     rmse_c3a, tv_c3a, tv_ratio);
 fprintf('     * 换向点单步电流突变 = %.1f counts (由自适应质量 M_hat*a_max/2Kf 决定, 比例 = %.3f ~ 17.6/12.44=1.41)\n', ...
     max_delta_i_c3a, delta_i_ratio_global);
-fprintf('     * 平滑段单步最大变化 = %.1f counts (平滑段增量比 = %.3f <= 1.25, 证明无高频抖颤)\n', ...
+fprintf('     * 排除过渡段后平滑最大突变 = %.2f counts (平滑段增量比 = %.3f <= 1.05)\n', ...
     max_delta_i_smooth_c3a, delta_i_ratio_smooth);
+fprintf('     * 排除过渡段后平滑差分 RMS = %.2f counts (C2a) vs %.2f counts (C3a)\n', ...
+    rms_delta_i_smooth_c2a, rms_delta_i_smooth_c3a);
 fprintf('   - C3a 闭环质量估计: 返程停稳均值 = %.3f kg (误差 %.2f%% <= 2.0%%)\n', ...
     M_cl_rev_mean, err_cl_rev_pct);
 
@@ -352,10 +371,10 @@ assert(max(abs(log_iR_c3a)) <= Imax + 1e-6, '右电机电流超出 Imax 硬限�
 assert(err_cl_rev_pct <= 2.0, 'C3a 闭环质量估计返程稳态误差超标！');
 assert(tv_ratio <= 1.10, 'C3a 控制量总变差超标，自适应参数抖颤过大！');
 assert(delta_i_ratio_global <= 1.45, '换向点自适应电流突变超过前馈质量比例极限！');
-assert(delta_i_ratio_smooth <= 1.25, '平滑运动阶段存在高频抖颤！');
+assert(delta_i_ratio_smooth <= 1.05, '在排除换向加速度跳变及其过渡段后，所选平滑时域指标发现异常高频尖峰！');
 assert(all(isfinite(log_yG_c3a)) && all(isfinite(log_M_est_cl)), '闭环状态出现发散/NaN！');
 
-fprintf('  -> PASS: C3a 自适应闭环在有限时域内数值有界，保持近似等效跟踪性能，无高频抖颤，TV 比值 = %.3f <= 1.10。\n\n', tv_ratio);
+fprintf('  -> PASS: C3a 自适应闭环在有限时域内数值有界，在排除换向加速度跳变及其过渡段后，所选平滑时域指标未发现异常高频尖峰，TV 比值 = %.3f <= 1.10。\n\n', tv_ratio);
 
 fprintf('==================================================================================\n');
 fprintf('  Step 3A 单元测试结果: 7 / 7 项全部严格通过 (PASS)!\n');

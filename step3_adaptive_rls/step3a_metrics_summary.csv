@@ -1,17 +1,18 @@
 Metric,C2a_Baseline,Offline_RLS_Replay,C3a_ClosedLoop,Unit,Notes
-Mass_Forward_Mean,NaN,17.608,17.534,kg,True=17.600 kg (t in [2.0 3.0]s)
+Mass_Forward_Mean,NaN,17.608,17.533,kg,True=17.600 kg (t in [2.0 3.0]s)
 Mass_Forward_ErrPct,NaN,0.04,0.38,%,Relative error
 Mass_Reverse_Mean,NaN,13.626,13.636,kg,True=13.600 kg (t in [5.8 6.8]s)
-Mass_Reverse_ErrPct,NaN,0.19,0.27,%,Relative error
-Mass_Reverse_Std,NaN,0.0011,0.0005,kg,Evaluation window jitter
+Mass_Reverse_ErrPct,NaN,0.19,0.26,%,Relative error
+Mass_Reverse_Std,NaN,0.0011,0.0004,kg,Evaluation window jitter
 ViscousDamping_Mean,NaN,70.10,70.10,N*s/m,True=70.00 N*s/m
-ViscousDamping_ErrPct,NaN,0.15,0.15,%,Relative error
-CoulombFriction_Mean,NaN,15.96,15.96,N,True=16.00 N
-CoulombFriction_ErrPct,NaN,0.26,0.26,%,Relative error
-PE_Active_Ratio,NaN,26.90,26.90,%,Gram matrix lambda_min >= 1e-4
+ViscousDamping_ErrPct,NaN,0.15,0.14,%,Relative error
+CoulombFriction_Mean,NaN,15.96,15.97,N,True=16.00 N
+CoulombFriction_ErrPct,NaN,0.26,0.21,%,Relative error
+PE_Active_Ratio,NaN,26.90,26.56,%,Gram matrix lambda_min >= 1e-4
 RMSE_yG,40.24,NaN,40.47,mm,Position tracking error (time aligned)
 Max_e_yG,89.45,NaN,89.45,mm,Peak position tracking error
-TV_Total,47467.7,NaN,48488.5,-,Total Variation
+TV_Total,47467.7,NaN,48491.3,-,Total Variation
 TV_Ratio,1.000,NaN,1.022,-,TV_c3a / TV_c2a <= 1.10
 Max_Delta_I_Global,1513.7,NaN,2129.8,count,Acceleration reversal step jump
-Max_Delta_I_Smooth,186.2,NaN,217.5,count,Smooth tracking max single-step diff (ratio <= 1.25)
+Max_Delta_I_Smooth,167.79,NaN,167.79,count,Smooth tracking max single-step diff (excluding +-100ms transients)
+RMS_Delta_I_Smooth,9.91,NaN,9.85,count,Smooth tracking RMS single-step diff

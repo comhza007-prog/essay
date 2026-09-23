@@ -33,6 +33,7 @@ ctrl_c2_base.eps_v = 0.01;
 ctrl_c2_base.eps_alpha = 0.01;
 ctrl_c2_base.I_fw_limit = 16000.0;
 ctrl_c2_base.enable_ff = true;
+ctrl_c2_base.dy_ecd = mech.dy_ecd;
 
 % 载入专用时域数据
 load('data_step3a.mat');
@@ -81,8 +82,11 @@ log_alpha_c3a = zeros(N_data, 1);
 log_iL_c3a = zeros(N_data, 1);
 log_iR_c3a = zeros(N_data, 1);
 log_M_est_cl = zeros(N_data, 1);
+log_bG_est_cl = zeros(N_data, 1);
+log_fcG_est_cl = zeros(N_data, 1);
+log_pe_cl = false(N_data, 1);
 
-dy_ecd = 1.2109e-6; % 8192 线编码器当量
+dy_ecd = mech.dy_ecd; % 8192 线编码器当量
 
 for k = 1:N_data
     tk = d3.t(k);
@@ -93,7 +97,7 @@ for k = 1:N_data
     vG_c = x_c3a(3);
     alphadot_c = x_c3a(4);
     
-    % 光电编码器物理量化测量输入
+    % 光电编码器物理量化测量输入 (仅输入辨识通道，控制反馈仍为理想状态)
     yG_quant_k = round(yG_c / dy_ecd) * dy_ecd;
     
     qc = [yG_c; alpha_c];
@@ -112,6 +116,9 @@ for k = 1:N_data
     log_iL_c3a(k) = iL_c3a;
     log_iR_c3a(k) = iR_c3a;
     log_M_est_cl(k) = info_c3a.M_tot_hat;
+    log_bG_est_cl(k) = info_c3a.bG_hat;
+    log_fcG_est_cl(k) = info_c3a.fcG_hat;
+    log_pe_cl(k) = info_c3a.is_pe_active;
     
     x_c3a = gantry_dynamics_step(x_c3a, iL_c3a, iR_c3a, mech, plant, ...
         dm_k, 0.0, 0.0, Ts, mech.Kf, mech.Kf);
@@ -132,13 +139,20 @@ bG_rev_mean = mean(th_hist(rev_idx, 2));
 bG_rev_err_pct = abs(bG_rev_mean - 70.0) / 70.0 * 100.0;
 fcG_rev_mean = mean(th_hist(rev_idx, 3));
 fcG_rev_err_pct = abs(fcG_rev_mean - 16.0) / 16.0 * 100.0;
+pe_active_ratio = sum(is_pe_hist(300:end)) / (N_data - 299) * 100.0;
 
-% C3a 闭环实际运行中的参数估计指标
+% C3a 闭环实际运行中的参数估计指标 (真实记录，彻底杜绝伪分列)
 M_cl_fwd_mean = mean(log_M_est_cl(fwd_idx));
 M_cl_fwd_err_pct = abs(M_cl_fwd_mean - 17.6) / 17.6 * 100.0;
 M_cl_rev_mean = mean(log_M_est_cl(rev_idx));
 M_cl_rev_err_pct = abs(M_cl_rev_mean - 13.6) / 13.6 * 100.0;
 M_cl_rev_std = std(log_M_est_cl(rev_idx));
+
+bG_cl_rev_mean = mean(log_bG_est_cl(rev_idx));
+bG_cl_rev_err_pct = abs(bG_cl_rev_mean - 70.0) / 70.0 * 100.0;
+fcG_cl_rev_mean = mean(log_fcG_est_cl(rev_idx));
+fcG_cl_rev_err_pct = abs(fcG_cl_rev_mean - 16.0) / 16.0 * 100.0;
+pe_cl_ratio = sum(log_pe_cl(300:end)) / (N_data - 299) * 100.0;
 
 % 控制动作总变差 TV
 tv_c2a = sum(abs(diff(d3.iL_cmd))) + sum(abs(diff(d3.iR_cmd)));
@@ -155,11 +169,15 @@ diR_c3a = abs(diff(log_iR_c3a));
 max_delta_i_c2a = max([max(diL_c2a), max(diR_c2a)]);
 max_delta_i_c3a = max([max(diL_c3a), max(diR_c3a)]);
 
-% 平滑跟踪段最大单步电流突变 (排除轨迹梯形加速度阶跃点)
-diff_a_cmd = abs(diff(traj.yddot(:)));
-smooth_mask = (diff_a_cmd < 1e-4);
+% 平滑跟踪段最大单步电流突变 (排除轨迹梯形加速度阶跃点及其过渡段 ±100 ms)
+step_pts = abs(diff(traj.yddot(:))) > 1e-4;
+transient_mask = conv(double(step_pts), ones(201, 1), 'same') > 0;
+smooth_mask = ~transient_mask;
+
 max_delta_i_smooth_c2a = max([max(diL_c2a(smooth_mask)), max(diR_c2a(smooth_mask))]);
 max_delta_i_smooth_c3a = max([max(diL_c3a(smooth_mask)), max(diR_c3a(smooth_mask))]);
+rms_delta_i_smooth_c2a = sqrt(mean([diL_c2a(smooth_mask); diR_c2a(smooth_mask)].^2));
+rms_delta_i_smooth_c3a = sqrt(mean([diL_c3a(smooth_mask); diR_c3a(smooth_mask)].^2));
 
 e_yG_c2a = (d3.yG - traj.y(:)) * 1e3; % mm
 e_yG_c3a = (log_yG_c3a - traj.y(:)) * 1e3; % mm
@@ -168,26 +186,27 @@ rmse_yG_c3a = sqrt(mean(e_yG_c3a.^2));
 max_e_yG_c2a = max(abs(e_yG_c2a));
 max_e_yG_c3a = max(abs(e_yG_c3a));
 
-pe_active_ratio = sum(is_pe_hist(300:end)) / (N_data - 299) * 100.0;
-
 fprintf('\n----------------------------------------------------------------------------------\n');
 fprintf('  Step 3A 核心辨识与控制性能指标汇总\n');
 fprintf('----------------------------------------------------------------------------------\n');
-fprintf('  [开环回放] 正向质量估计均值 = %.3f kg (误差 %.2f%%), 返程稳态均值 = %.3f kg (误差 %.2f%%, 抖动 std = %.4f kg)\n', ...
+fprintf('  [开环回放] 正向质量 = %.3f kg (误差 %.2f%%), 返程稳态 = %.3f kg (误差 %.2f%%, 抖动 std = %.4f kg)\n', ...
     M_fwd_mean, M_fwd_err_pct, M_rev_mean, M_rev_err_pct, M_rev_std);
-fprintf('  [闭环辨识] 正向质量估计均值 = %.3f kg (误差 %.2f%%), 返程稳态均值 = %.3f kg (误差 %.2f%%, 抖动 std = %.4f kg)\n', ...
+fprintf('             阻尼均值 = %.2f N*s/m (误差 %.2f%%), 库仑摩擦 = %.2f N (误差 %.2f%%), PE 激活率 = %.2f%%\n', ...
+    bG_rev_mean, bG_rev_err_pct, fcG_rev_mean, fcG_rev_err_pct, pe_active_ratio);
+fprintf('  [闭环辨识] 正向质量 = %.3f kg (误差 %.2f%%), 返程稳态 = %.3f kg (误差 %.2f%%, 抖动 std = %.4f kg)\n', ...
     M_cl_fwd_mean, M_cl_fwd_err_pct, M_cl_rev_mean, M_cl_rev_err_pct, M_cl_rev_std);
-fprintf('  [摩擦辨识] 阻尼均值 = %.2f N*s/m (误差 %.2f%%), 库仑摩擦均值 = %.2f N (误差 %.2f%%)\n', ...
-    bG_rev_mean, bG_rev_err_pct, fcG_rev_mean, fcG_rev_err_pct);
-fprintf('  [PE 门控]  300ms 滑动窗激活占比 = %.2f%% (匀速与静止段绝对冻结)\n', pe_active_ratio);
+fprintf('             阻尼均值 = %.2f N*s/m (误差 %.2f%%), 库仑摩擦 = %.2f N (误差 %.2f%%), PE 激活率 = %.2f%%\n', ...
+    bG_cl_rev_mean, bG_cl_rev_err_pct, fcG_cl_rev_mean, fcG_cl_rev_err_pct, pe_cl_ratio);
 fprintf('  [跟踪误差] C2a RMSE = %.2f mm (峰值 %.2f mm) -> C3a RMSE = %.2f mm (峰值 %.2f mm)\n', ...
     rmse_yG_c2a, max_e_yG_c2a, rmse_yG_c3a, max_e_yG_c3a);
 fprintf('  [控制变差] C2a TV = %.1f -> C3a TV = %.1f (TV 比值 = %.3f <= 1.10)\n', ...
     tv_c2a, tv_c3a, tv_ratio);
 fprintf('  [电流变化] 换向突变点: C2a = %.1f, C3a = %.1f (比值 %.3f ~ 17.6/12.44=1.41)\n', ...
     max_delta_i_c2a, max_delta_i_c3a, max_delta_i_c3a/max_delta_i_c2a);
-fprintf('             平滑跟踪段: C2a = %.1f, C3a = %.1f counts (比值 %.3f <= 1.25, 无高频抖颤)\n', ...
+fprintf('             排除过渡段后平滑最大突变: C2a = %.2f, C3a = %.2f counts (比值 %.3f <= 1.05)\n', ...
     max_delta_i_smooth_c2a, max_delta_i_smooth_c3a, max_delta_i_smooth_c3a/max_delta_i_smooth_c2a);
+fprintf('             排除过渡段后平滑差分 RMS: C2a = %.2f counts vs C3a = %.2f counts\n', ...
+    rms_delta_i_smooth_c2a, rms_delta_i_smooth_c3a);
 fprintf('----------------------------------------------------------------------------------\n\n');
 
 %% 4. 生成高学术规格图表 1: step3a_parameter_identification.png
@@ -349,17 +368,18 @@ fprintf(fid, 'Mass_Forward_ErrPct,NaN,%.2f,%.2f,%%,Relative error\n', M_fwd_err_
 fprintf(fid, 'Mass_Reverse_Mean,NaN,%.3f,%.3f,kg,True=13.600 kg (t in [5.8 6.8]s)\n', M_rev_mean, M_cl_rev_mean);
 fprintf(fid, 'Mass_Reverse_ErrPct,NaN,%.2f,%.2f,%%,Relative error\n', M_rev_err_pct, M_cl_rev_err_pct);
 fprintf(fid, 'Mass_Reverse_Std,NaN,%.4f,%.4f,kg,Evaluation window jitter\n', M_rev_std, M_cl_rev_std);
-fprintf(fid, 'ViscousDamping_Mean,NaN,%.2f,%.2f,N*s/m,True=70.00 N*s/m\n', bG_rev_mean, bG_rev_mean);
-fprintf(fid, 'ViscousDamping_ErrPct,NaN,%.2f,%.2f,%%,Relative error\n', bG_rev_err_pct, bG_rev_err_pct);
-fprintf(fid, 'CoulombFriction_Mean,NaN,%.2f,%.2f,N,True=16.00 N\n', fcG_rev_mean, fcG_rev_mean);
-fprintf(fid, 'CoulombFriction_ErrPct,NaN,%.2f,%.2f,%%,Relative error\n', fcG_rev_err_pct, fcG_rev_err_pct);
-fprintf(fid, 'PE_Active_Ratio,NaN,%.2f,%.2f,%%,Gram matrix lambda_min >= 1e-4\n', pe_active_ratio, pe_active_ratio);
+fprintf(fid, 'ViscousDamping_Mean,NaN,%.2f,%.2f,N*s/m,True=70.00 N*s/m\n', bG_rev_mean, bG_cl_rev_mean);
+fprintf(fid, 'ViscousDamping_ErrPct,NaN,%.2f,%.2f,%%,Relative error\n', bG_rev_err_pct, bG_cl_rev_err_pct);
+fprintf(fid, 'CoulombFriction_Mean,NaN,%.2f,%.2f,N,True=16.00 N\n', fcG_rev_mean, fcG_cl_rev_mean);
+fprintf(fid, 'CoulombFriction_ErrPct,NaN,%.2f,%.2f,%%,Relative error\n', fcG_rev_err_pct, fcG_cl_rev_err_pct);
+fprintf(fid, 'PE_Active_Ratio,NaN,%.2f,%.2f,%%,Gram matrix lambda_min >= 1e-4\n', pe_active_ratio, pe_cl_ratio);
 fprintf(fid, 'RMSE_yG,%.2f,NaN,%.2f,mm,Position tracking error (time aligned)\n', rmse_yG_c2a, rmse_yG_c3a);
 fprintf(fid, 'Max_e_yG,%.2f,NaN,%.2f,mm,Peak position tracking error\n', max_e_yG_c2a, max_e_yG_c3a);
 fprintf(fid, 'TV_Total,%.1f,NaN,%.1f,-,Total Variation\n', tv_c2a, tv_c3a);
 fprintf(fid, 'TV_Ratio,1.000,NaN,%.3f,-,TV_c3a / TV_c2a <= 1.10\n', tv_ratio);
 fprintf(fid, 'Max_Delta_I_Global,%.1f,NaN,%.1f,count,Acceleration reversal step jump\n', max_delta_i_c2a, max_delta_i_c3a);
-fprintf(fid, 'Max_Delta_I_Smooth,%.1f,NaN,%.1f,count,Smooth tracking max single-step diff (ratio <= 1.25)\n', max_delta_i_smooth_c2a, max_delta_i_smooth_c3a);
+fprintf(fid, 'Max_Delta_I_Smooth,%.2f,NaN,%.2f,count,Smooth tracking max single-step diff (excluding +-100ms transients)\n', max_delta_i_smooth_c2a, max_delta_i_smooth_c3a);
+fprintf(fid, 'RMS_Delta_I_Smooth,%.2f,NaN,%.2f,count,Smooth tracking RMS single-step diff\n', rms_delta_i_smooth_c2a, rms_delta_i_smooth_c3a);
 fclose(fid);
 fprintf('  -> [OK] step3a_metrics_summary.csv 导出完成\n\n');
 

@@ -73,10 +73,12 @@ classdef rls_estimator_mech
         %% 重置状态
         function obj = reset(obj, theta_init)
             if nargin >= 2 && ~isempty(theta_init)
-                obj.theta_hat = theta_init(:);
+                th0 = theta_init(:);
             else
-                obj.theta_hat = [13.1; 70.0; 16.0];
+                th0 = [13.1; 70.0; 16.0];
             end
+            % 严格凸集投影初值，确保任意外部初始化均满足紧凑凸集约束
+            obj.theta_hat    = max(obj.theta_min, min(obj.theta_max, th0));
             obj.theta_proj   = obj.theta_hat;
             obj.theta_rate   = obj.theta_hat;
             obj.theta_smooth = obj.theta_hat;

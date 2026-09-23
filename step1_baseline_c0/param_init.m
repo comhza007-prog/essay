@@ -51,6 +51,8 @@ function [ctrl, mech, plant] = param_init()
     mech.z_gear = 20;                % 齿数 z = 20
     mech.rp = (mech.m_gear * mech.z_gear / 2.0) * 1e-3; % 分度圆半径 rp = 0.03 m (30 mm)
     mech.eta_g = 0.85;               % 传动系统机械效率 [假设参数]
+    % 编码器单线脉冲当量 (8192 counts/rev, 减速比 N, 分度圆半径 rp)
+    mech.dy_ecd = (2.0 * pi * mech.rp) / (mech.N * ctrl.ecd_cpr);
     
     % CAN 电流指令 -> 输出轴推力标定常数 [假设参数/待辨识]
     % 说明: 16000 为 CAN 指令 raw counts，非直接电流安培数。
