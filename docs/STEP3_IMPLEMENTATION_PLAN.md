@@ -132,35 +132,40 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
 - **数据生成器升级**：在 [`generate_step3b_phase0_data.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/generate_step3b_phase0_data.m) 中同时导出理想连续通道 `yL_ideal, yR_ideal` 与线位移量化测量通道 `yL_quant, yR_quant`（量化步长 $q_y = 1.21\,\mu\text{m}$，固定种子 `rng(20260923)`）。动力学真值 `alpha_true, alpha_dot_true, alpha_ddot_true, T_fric_true` 仅作为误差对比真值，严禁作为辨识输入；
 - **真实传感器回归构造函数**：新建 [`build_step3b_regression.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/build_step3b_regression.m)，严格从左右传感器通道重构几何转角 $\alpha_{\text{raw}} = (y_R - y_L)/L_e$，通过 4 阶因果 SVF 滤波器提取 $\alpha_f, \dot{\alpha}_f, \ddot{\alpha}_f$，从差分测速中重构导轨摩擦力矩，杜绝使用真实状态。
 
-### 3. Phase 0 实测验证成果与证据链 (已闭环完成)
+### 3. Phase 0 实测验证成果与证据链 (已全面完成)
 运行 [`verify_step3b_phase0.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/verify_step3b_phase0.m) 形成以下完整量化证据链（已导出至 [`step3b_phase0_preanalysis.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase0_preanalysis.csv)）：
-1. **Test 1 动力学与符号一致性检验**：
-   - 动力学函数一致性：1000 组随机工况下公共微分核与 Step 2 原生实现残差为 $0.00\text{e}+00 < 10^{-12}$，**PASS**；
-   - 代数回归一致性：独立采样状态下动力学力矩与回归基底残差为 $1.11\times 10^{-15}\text{ N}\cdot\text{m} < 10^{-12}$，**PASS**；
+1. **Test 1 动力学、回归结构与因果滤波多重一致性检验**：
+   - **Test 1A (公共动力学与冻结旧实现一致性)**：对比从 Commit `7a41488` 提取并冻结的旧版实现夹具 [`output/tests/fixtures/gantry_dynamics_deriv_legacy.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/tests/fixtures/gantry_dynamics_deriv_legacy.m) 与 [`output/common/gantry_dynamics_deriv.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/common/gantry_dynamics_deriv.m)，在 1000 组随机物理工况下，微分导数最大残差与 RK4 单步推演最大残差均为 $0.00\text{e}+00 < 10^{-12}$，**PASS**；
+   - **Test 1B (理想动力学真值代数一致性)**：在两组工况下代入连续真实状态，理论阻抗力矩与非对称基底代数残差最大为 $1.11\times 10^{-15}\text{ N}\cdot\text{m} < 10^{-12}$，证实回归数学模型精确自洽，**PASS**；
+   - **Test 1C (传感器重构回归残差)**：严格基于理想连续传感器通道 $(y_L, y_R)$ 与实际输入电流 $(i_L, i_R)$，通过因果 SVF 独立重构，在 $t \ge 0.5\text{ s}$ 强激励段内残差 RMS 为 $3.75\sim 4.56\times 10^{-3}\text{ N}\cdot\text{m}$，占有效信号强度仅 $0.44\%\sim 0.49\% \le 1.0\%$，**PASS**；
+   - **Test 1D (批处理 SVF 与在线递推 SVF 数值等价性)**：调用专用测试脚本 [`output/step3_adaptive_rls/verify_svf_batch_online_equivalence.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/verify_svf_batch_online_equivalence.m)，对比离线批处理 `build_step3b_regression.m` 与在线逐点 Direct Form II Transposed 递推类 [`output/step3_adaptive_rls/rls_filter_svf_step3b.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/rls_filter_svf_step3b.m)，在全程 4001 个采样步长（含 $t<0.5\text{ s}$ 初始瞬态及 $t\ge 0.5\text{ s}$ 稳定段）内，8 个滤波与回归通道 $(\alpha_f, \dot{\alpha}_f, \ddot{\alpha}_f, y_{G,f}, T_{\text{fric},f}, T_{\text{req},f}, \phi_f, y_f)$ 的点对点最大残差均为 $0.00\text{e}+00 < 10^{-12}$，证实两者在数值上严格完全等价，**PASS**；
 2. **Test 2 理想连续测量回归 ($t \ge 0.5\text{ s}$)**：
    - $r=0.70$：估计值 $-0.0021890\text{ N/count}$，相对误差 $0.0677\% \le 1.0\%$；
    - $r=1.30$：估计值 $+0.0016183\text{ N/count}$，相对误差 $0.0868\% \le 1.0\%$；
-   - 残差 RMS 维持在 $3.6\sim 4.5\times 10^{-3}\text{ N}\cdot\text{m}$，符号均正确恢复，**PASS**；
-3. **Test 3 量化测量回归 (量化分辨率 $q_y = 1.21\,\mu\text{m}$)**：
-   - 单参数标量 PE 门控条件为 $\sqrt{G_k} \ge \sigma_{\text{PE,th}}$，对应 Gram 能量阈值 $G_k \ge \sigma_{\text{PE,th}}^2$；
+   - 残差 RMS 维持在 $3.69\sim 4.50\times 10^{-3}\text{ N}\cdot\text{m}$，符号均正确恢复，**PASS**；
+3. **Test 3 8192 线位置编码器量化测量回归 ($q_y = 1.21\,\mu\text{m}$，理想电流指令)**：
+   - 明确边界：本测试验证 8192 线编码器位移量化下的开环回归特性，驱动器电流输入为理想限幅指令，不包含硬件电流反馈噪声；
+   - 单参数标量 PE 门控条件为 $\sqrt{G_k} \ge \sigma_{\text{PE,th}}$，阶梯阈值扫描 $\{1, 10, 50, 100\}\text{ count}\cdot\text{m}$；
    - 候选基准阈值 $\sigma_{\text{PE,th}} = 50\text{ count}\cdot\text{m}$ 下：
-     - $r=0.70$ 估计相对误差 $0.0688\% \le 5.0\%$，滑动窗估计标准差 $0.22\% \le 5.0\%$；
-     - $r=1.30$ 估计相对误差 $0.0956\% \le 5.0\%$，滑动窗估计标准差 $0.35\% \le 5.0\%$；
-     - 在当前连续理想状态、预定义激励区间和停顿区间内，候选阈值均未观察到误激活（$0.0\% \le 1.0\%$）或漏激活（$0.0\% \le 1.0\%$），残差 RMS 稳定在 $3.9\sim 4.6\times 10^{-3}\text{ N}\cdot\text{m}$，**PASS**；
+     - $r=0.70$ 估计相对误差 $0.0688\% \le 5.0\%$，局部窗口估计变异率 (local-window estimate variation) $0.22\% \le 5.0\%$；
+     - $r=1.30$ 估计相对误差 $0.0956\% \le 5.0\%$，局部窗口估计变异率 $0.35\% \le 5.0\%$；
+     - 在当前仿真设定的确定性激励区间和停顿区间内，候选基准阈值未观察到误激活（$0.0\% \le 1.0\%$）或漏激活（$0.0\% \le 1.0\%$），残差 RMS 稳定在 $3.95\sim 4.53\times 10^{-3}\text{ N}\cdot\text{m}$，**PASS**；
 4. **Test 4 结构参数独立敏感性评测 (基于全链路测量重构)**：
    - 在当前 Phase 0 仿真条件下的敏感性结果：
    - **$K_\alpha \pm 20\%$**：$r=0.70$ 偏差 $-18.63\% / +18.77\%$ (增益 $0.932 / 0.939$)；$r=1.30$ 偏差 $-20.22\% / +20.41\%$ (增益 $1.011 / 1.020$)，证实准静态同相平衡下误差传递增益 $\approx 1.0$；
    - **$B_\alpha \pm 20\%$**：$r=0.70$ 偏差 $-0.22\% / +0.36\%$ (增益 $0.011 / 0.018$)；$r=1.30$ 偏差 $-0.13\% / +0.32\%$ (增益 $0.007 / 0.016$)，证实正交相位抑制特性；
    - **$J_0 \pm 20\%$**：$r=0.70$ 偏差 $+0.32\% / -0.18\%$ (增益 $-0.016 / -0.009$)；$r=1.30$ 偏差 $+0.38\% / -0.19\%$ (增益 $-0.019 / -0.009$)，证实低频激励远低于固有频率时的惯性解耦特性。
 
-### 4. Phase 1 开始条件与边界承诺
-在 Phase 0 完成真实测量回归链路构造并经技术评审确认后，方可启动 `rls_estimator_delta_kf.m` 的编写。必须严格满足以下准入条件：
-1. Step 2 与公共动力学函数等价（已达成：残差 $0.00\text{e}+00$）；
-2. 理想传感器回归误差 $\le 1.0\%$（已达成：$0.07\%\sim 0.09\%$）；
-3. 量化传感器回归误差 $\le 5.0\%$（已达成：$0.07\%\sim 0.10\%$）；
-4. 两个非对称方向均能正确恢复符号（已达成）；
-5. PE 误激活率 $\le 1.0\%$、漏激活率 $\le 1.0\%$（已达成：$0.0\%$）；
-6. 估计标准差 $\le 5.0\%$（已达成：$0.22\%\sim 0.35\%$）；
-7. $K_\alpha, B_\alpha, J_0$ 敏感性结果可重复（已达成）；
-8. 严格开环隔离：在 Step 3B 验收前，严禁接入 C3a、SyncAlloc 或任何闭环控制器。
+### 4. Phase 1 准入核查与后续边界承诺
+在 Phase 0 基础性工作全部扎实闭环后，已满足技术准入条件：
+1. 动力学函数与冻结参考夹具严格等价（已达成：残差 $0.00\text{e}+00 < 10^{-12}$）；
+2. 批处理 SVF 与在线递推 SVF 严格数值等价（已达成：残差 $0.00\text{e}+00 < 10^{-12}$）；
+3. 理想传感器回归相对误差 $\le 1.0\%$（已达成：$0.07\%\sim 0.09\%$）；
+4. 位置量化回归相对误差 $\le 5.0\%$（已达成：$0.07\%\sim 0.10\%$）；
+5. 两个非对称方向均能正确恢复符号（已达成）；
+6. 预定义工况下 PE 误激活率 $\le 1.0\%$、漏激活率 $\le 1.0\%$（已达成：均为 $0.0\%$）；
+7. 局部窗口估计变异率 $\le 5.0\%$（已达成：$0.22\%\sim 0.35\%$）；
+8. $K_\alpha, B_\alpha, J_0$ 敏感性传递增益已建立定量分析基准；
+9. **严格开环隔离红线**：在 Step 3B 离线估计通过完整验收前，**严禁将 $\Delta K_f$ 估计值接入 C3a、SyncAlloc 或任何闭环控制回路**。
+
 
