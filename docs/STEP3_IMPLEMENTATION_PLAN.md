@@ -111,3 +111,37 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
    - **时域数值有界**：闭环系统在 7s 仿真时域内所有状态与参数数值有界；
    - **跟踪精度保持**：闭环 $\text{RMSE}_{yG} \le 1.05 \times \text{RMSE}_{\text{C2a}}$（实测 $40.47\text{ mm}$ vs $40.24\text{ mm}$，差异 $+0.57\%$，严格表述为“保持近似等效跟踪性能并完成平稳参数接入”）；
    - **总变差与抖颤检验**：$\text{TV}_{\text{total}} \le 1.10 \times \text{TV}_{\text{C2a}}$（实测比值 $1.022$）；在排除换向加速度跳变及其过渡段 $\pm 100\text{ ms}$ 后，平滑跟踪阶段单步最大电流变化比值为 $1.000 \le 1.05$（实测均为 $167.79\text{ counts}$，RMS 为 $9.85$ vs $9.91\text{ counts}$），在排除过渡段后所选平滑时域指标未发现异常高频尖峰。换向突变点单步电流跳变由自适应质量与名义质量前馈比例决定（实测比值 $1.407 \approx 17.6/12.44 = 1.41$）。
+
+---
+
+## 六、Step 3B 执行器推力非对称性 ($\Delta K_f$) 开环可辨识性预研与离线标定方案
+
+### 1. 统一符号定义与严格物理边界规范
+- **统一定义**：$\Delta K_f \triangleq K_{f,L} - K_{f,R}$，全项目代码与变量命名统一为 `Delta_Kf`。
+  $$K_{f,L} = K_{f,\text{mean}} + \frac{1}{2}\Delta K_f, \quad K_{f,R} = K_{f,\text{mean}} - \frac{1}{2}\Delta K_f$$
+  工况 A ($r=0.70 < 1$) 真值 $\Delta K_f = -0.0021875\text{ N/count}$；工况 B ($r=1.30 > 1$) 真值 $\Delta K_f = +0.0016168\text{ N/count}$。
+- **摩擦参数真值属性澄清**：Step 3A 仅辨识总阻尼与总摩擦；Step 3B 仿真中设定对称摩擦 $b_L=b_R=35\text{ N}\cdot\text{s/m}, f_{c,L}=f_{c,R}=8\text{ N}$ 为**仿真动力学模型的基准设定真值 (Ground Truth)**。
+- **Phase 0 物理边界锁定**：严格设定偏心距 $d=0\text{ m}$，附加偏载 $\Delta m=0\text{ kg}$。在此边界下，所需阻抗力矩严格满足：
+  $$T_{\text{req}} = J_0 \ddot{\alpha} + B_\alpha \dot{\alpha} + K_\alpha \alpha + T_{\text{fric},\alpha}$$
+  若后续扩展至偏载 $d \neq 0, \Delta m \neq 0$，则必须补入平动-偏转惯性耦合力矩 $\Delta m \cdot d \cdot \ddot{y}_G$。
+- **严格开环隔离红线**：Step 3B 仅作为开环离线标定与可辨识性预研，**严禁将 $\Delta K_f$ 估计值接入任何前馈或反馈闭环控制器**。
+
+### 2. 底层微分函数解耦与传感器通道规范
+- **公共微分计算核**：新建公开函数 `gantry_dynamics_deriv_step3b.m`，由 RK4 动力学积分推演函数 `gantry_dynamics_step_step3b.m` 与测试检验脚本共同调用，彻底消除模型复写风险；
+- **显式传感器通道导出**：数据生成器 `generate_step3b_phase0_data.m` 显式记录并导出左右独立传感器通道与物理全状态：
+  `yL, yR, vL, vR, yG, alpha, alpha_dot, alpha_ddot, iL_actual, iR_actual, phi_Delta_T, y_Delta_T, Delta_Kf_true`。
+
+### 3. Phase 0 实测验证成果与证据链 (已闭环完成)
+运行 `verify_step3b_phase0.m` 形成以下完整量化证据链（已导出至 `step3b_phase0_preanalysis.csv`）：
+1. **Test 1 独立代数自洽性**：从左右传感器通道独立重构 $y_G, \alpha$ 并通过底层动力学检验，$r=0.70$ 与 $r=1.30$ 两工况代数残差均 $< 1.0\times 10^{-12}\text{ N}\cdot\text{m}$，100% PASS；
+2. **真实滤波信号下 PE 阈值阶梯标定**：
+   - 激励电流采用 $0.2\sim 2.5\text{ s}$ 强激励与 $2.7\sim 4.0\text{ s}$ 停顿静止死区；
+   - 滤波回归基底 $\phi_{\Delta,T,f}$ 峰值 $900.0\text{ count}\cdot\text{m}$，有效段 $\text{RMS} \in [292, 794]\text{ count}\cdot\text{m}$，停顿段残余 $\le 0.34\text{ count}\cdot\text{m}$；
+   - 对阈值 $\sigma_{\text{PE,th}} \in [1, 10, 50, 100]\text{ count}\cdot\text{m}$，停顿段误激活率恒为 **0.0%**，激励段漏激活率恒为 **0.0%**，估计相对误差恒为 **0.00%**；断开延迟由 1 count*m 的 252ms 缩短至 100 count*m 的 137ms。基准推荐阈值锁定为 $\sigma_{\text{PE,th}} = 10\sim 50\text{ count}\cdot\text{m}$；
+3. **三组结构参数独立敏感性评测 ($K_\alpha, B_\alpha, J_0 \pm 20\%$)**：
+   - **$K_\alpha \pm 20\%$**：$r=0.70$ 偏差 $\pm 18.16\%$ (误差增益 0.908)；$r=1.30$ 偏差 $\pm 20.13\%$ (误差增益 1.006)，数值严格证实准静态同相平衡下误差传递增益 $\approx 1.0$；
+   - **$B_\alpha \pm 20\%$**：$r=0.70$ 偏差 $\pm 0.44\%$ (增益 0.022)；$r=1.30$ 偏差 $\pm 0.54\%$ (增益 0.027)，数值证实正交相位抑制特性（误差衰减 97%）；
+   - **$J_0 \pm 20\%$**：$r=0.70$ 偏差 $\mp 0.24\%$ (增益 -0.012)；$r=1.30$ 偏差 $\mp 0.29\%$ (增益 -0.015)，数值证实低频激励远低于固有频率 ($11.4\text{ Hz}$) 时的惯性解耦特性。
+
+### 4. Phase 1 正式 RLS 编码推进条件
+在 Phase 0 数据与可辨识性预分析获得正式批准后，方启动 `rls_estimator_delta_kf.m` 与完整基准测试 `run_step3b_benchmark.m` 的编写。
