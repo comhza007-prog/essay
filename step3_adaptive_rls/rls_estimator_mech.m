@@ -131,6 +131,7 @@ classdef rls_estimator_mech
             end
             
             % 4. RLS 核心递推
+            theta_candidate = obj.theta_hat;
             if obj.is_pe_active
                 % 预测误差
                 y_pred = phi' * obj.theta_hat;
@@ -141,8 +142,11 @@ classdef rls_estimator_mech
                 denom = obj.lambda + phi' * P_phi;
                 K = P_phi / denom;
                 
-                % 参数与协方差更新
-                obj.theta_hat = obj.theta_hat + K * err;
+                % 参数与协方差更新 (投影 RLS: 内部估计状态直接投影至紧凑凸集)
+                theta_candidate = obj.theta_hat + K * err;
+                obj.theta_hat = max(obj.theta_min, min(obj.theta_max, theta_candidate));
+                obj.theta_proj = obj.theta_hat;
+                
                 obj.P = (obj.P - K * (phi' * obj.P)) / obj.lambda;
                 
                 % 协方差矩阵对称化与上限保护
@@ -155,11 +159,8 @@ classdef rls_estimator_mech
                 % theta_hat 保持不变
             end
             
-            % 5. 紧凑凸集物理投影算子 Proj_Omega
-            obj.theta_proj = max(obj.theta_min, min(obj.theta_max, obj.theta_hat));
-            
-            % 6. 单步速率限制器 (Slew-Rate Limiter)
-            delta_theta = obj.theta_proj - obj.theta_rate;
+            % 5. 单步速率限制器 (Slew-Rate Limiter)
+            delta_theta = obj.theta_hat - obj.theta_rate;
             delta_clamped = max(-obj.rate_limit, min(obj.rate_limit, delta_theta));
             obj.theta_rate = obj.theta_rate + delta_clamped;
             
@@ -172,6 +173,7 @@ classdef rls_estimator_mech
             % 输出诊断结构体
             if nargout >= 3
                 info.theta_raw = obj.theta_hat;
+                info.theta_candidate = theta_candidate;
                 info.theta_proj = obj.theta_proj;
                 info.theta_rate = obj.theta_rate;
                 info.theta_smooth = obj.theta_smooth;

@@ -11,7 +11,7 @@
 % =========================================================================
 
 function [iL_cmd, iR_cmd, state_c3a, info] = controller_c3a_rls_robust( ...
-    q, qdot, qd, qdot_d, qddot_d, ctrl_c2, Le, Kf_L, Kf_R, Imax, state_c3a, dt)
+    q, qdot, qd, qdot_d, qddot_d, ctrl_c2, Le, Kf_L, Kf_R, Imax, state_c3a, dt, yG_meas)
 
     if nargin < 12 || isempty(dt)
         dt = 0.001;
@@ -85,7 +85,11 @@ function [iL_cmd, iR_cmd, state_c3a, info] = controller_c3a_rls_robust( ...
     % 8. 在线估计器单步更新 (采用实际施加推力与位置量)
     % 实际施加推力指令
     FG_applied = Kf_L * iL_cmd - Kf_R * iR_cmd;
-    yG_meas = q(1);
+    if nargin < 13 || isempty(yG_meas)
+        % 若未显式传入量化测量，默认根据 8192 线编码器当量进行物理量化
+        dy_ecd = 1.2109e-6; % 2*pi*rp / (N*8192)
+        yG_meas = round(q(1) / dy_ecd) * dy_ecd;
+    end
     
     % 状态变量滤波递推
     [state_c3a.filter, yG_f, ydot_f, yddot_f, FG_f, Sf_f] = ...
