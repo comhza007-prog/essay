@@ -168,4 +168,46 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
 8. $K_\alpha, B_\alpha, J_0$ 敏感性传递增益已建立定量分析基准；
 9. **严格开环隔离红线**：在 Step 3B 离线估计通过完整验收前，**严禁将 $\Delta K_f$ 估计值接入 C3a、SyncAlloc 或任何闭环控制回路**。
 
+---
+
+## 七、Step 3B Phase 1 实施成果：单参数 $\Delta K_f$ 开环 RLS 估计器与基准测试
+
+### 1. 核心估计器模块设计 ([`output/step3_adaptive_rls/rls_estimator_delta_kf.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/rls_estimator_delta_kf.m))
+- **标量 RLS 递推序列与数值保护**：
+  $$\text{den} = \lambda + \phi_k P_{k-1} \phi_k, \quad K_k = \frac{P_{k-1} \phi_k}{\text{den}}$$
+  $$\theta_{\text{unprojected}} = \theta_{k-1} + K_k (y_k - \phi_k \theta_{k-1})$$
+  $$P_{\text{unprojected}} = \frac{P_{k-1} (1 - K_k \phi_k)}{\lambda}$$
+  $$P_k = \min(\max(P_{\text{unprojected}}, P_{\min}), P_{\max}), \quad P_{\min}=10^{-12}, P_{\max}=1.0\ (\text{N/count})^2$$
+  $$\theta_k = \text{proj}(\theta_{\text{unprojected}}) = \min(\max(\theta_{\text{unprojected}}, \theta_{\min}), \theta_{\max})$$
+- **环形缓冲区 PE 均方根能量门控**：
+  - 维护 $N_W = 200\text{ 步}$（$200\text{ ms}$）环形缓冲区，计算均方根能量 $\text{pe\_metric} = \sqrt{\max(\frac{1}{N_W}\sum \phi_f^2, 0)}$；
+  - 门控阈值 $\sigma_{\text{PE,th}} = 50.0\text{ count}\cdot\text{m}$，对应能量方门限 $G_{\text{PE,th}} = 2500.0\ (\text{count}\cdot\text{m})^2$；
+  - **PE 不满足时绝对完全冻结**：$\theta_k = \theta_{k-1}, P_k = P_{k-1}$，严禁除以 $\lambda$，彻底隔绝静止与匀速段协方差风积。
+- **投影边界定义**：
+  - **物理精确非对称边界**（对应 $r \in [0.65, 1.35]$）：$\theta_{\min} = -0.0026295\text{ N/count}, \theta_{\max} = +0.0018465\text{ N/count}$；
+  - **对称工程边界**（覆盖但宽于物理范围）：$[-0.00263, +0.00263]\text{ N/count}$。
+
+### 2. 六大基准测试实测结果 ([`output/step3_adaptive_rls/verify_rls_estimator_delta_kf.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/verify_rls_estimator_delta_kf.m))
+结果已导出至 [`step3b_phase1_rls_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase1_rls_results.csv)：
+1. **Test A1 (理论模型零偏差基线)**：输入理论回归信号（$\Delta K_{f,\text{true}} = 0$），最终绝对误差 **$9.33\times 10^{-21}\text{ N/count} \le 1.0\times 10^{-8}\text{ N/count}$**，投影次数 $0$，**PASS**；
+2. **Test A2 (传感器重构零基线)**：输入连续传感器重构信号，终点绝对误差 $1.60\times 10^{-7}\text{ N/count}$（占标称推力仅 $0.0026\%$，为测速差分离散底噪），稳态标准差 $2.41\times 10^{-21}$，PE 激活率 $66.6\%$，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，**PASS**；
+3. **Test B (负向非对称 $r=0.70$)**：真值 $-0.0021875$，估计值 **$-0.0021887\text{ N/count}$**，相对误差 **$0.0531\% \le 5.0\%$**，符号正确，停顿段绝对冻结，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，**PASS**；
+4. **Test C (正向非对称 $r=1.30$)**：真值 $+0.0016168$，估计值 **$+0.0016180\text{ N/count}$**，相对误差 **$0.0699\% \le 5.0\%$**，符号正确，停顿段绝对冻结，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，**PASS**；
+5. **Test D (8192 线位置量化抗噪)**：
+   - $r=0.70$：估计值 $-0.0021887$，相对误差 **$0.0562\% \le 5.0\%$**，局部窗口估计变异率 **$0.0288\% \le 5.0\%$**，停顿误动 $0.0\%$，强激漏动 $0.0\%$，投影次数 $0$；
+   - $r=1.30$：估计值 $+0.0016181$，相对误差 **$0.0798\% \le 5.0\%$**，局部窗口估计变异率 **$0.0436\% \le 5.0\%$**，停顿误动 $0.0\%$，强激漏动 $0.0\%$，投影次数 $0$；
+   - **PASS**；
+6. **Test E (结构参数误差敏感性)**：
+   - $K_\alpha \pm 20\%$：传递增益 $0.894 \sim 1.013$；在 $r=1.30, K_\alpha+20\%$ 极端情况下未受约束值达 $0.00195$，投影机制精准生效将其截断至物理上界 $+0.0018465$；
+   - $B_\alpha \pm 20\%$：传递增益 $0.019 \sim 0.033 \le 0.05$（正交相位抑制）；
+   - $J_0 \pm 20\%$：传递增益 $-0.009 \sim -0.019 \le 0.05$（惯性解耦）；
+   - **PASS**；
+7. **Test F (越界投影与协方差稳定性)**：
+   - 正向极端冲击（$y = +10^6$）：$\theta_{\text{unprojected}} = +497.5\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = +0.0018465\text{ N/count}$ 精确截断在物理上界，协方差 $P = 4.98\times 10^{-7}$ 有界正定；
+   - 负向极端冲击（$y = -10^6$）：$\theta_{\text{unprojected}} = -332.2\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = -0.0026295\text{ N/count}$ 精确截断在物理下界；
+   - 持续零 PE 静止段（$\lambda = 0.98$ 遗忘因子下测试 5000 步零激励）：$|P_{\text{after}} - P_{\text{init}}| < 10^{-15}$，协方差严格绝对冻结，零风积；
+   - 对称工程边界 $[-0.00263, +0.00263]$ 同步通过截断断言；
+   - **PASS**。
+
+
 

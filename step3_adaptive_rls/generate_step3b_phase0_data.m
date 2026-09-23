@@ -17,6 +17,7 @@ function generate_step3b_phase0_data()
     script_dir = fileparts(mfilename('fullpath'));
     output_dir = fullfile(script_dir, '..');
     
+    addpath(fullfile(output_dir, 'common'));
     addpath(fullfile(output_dir, 'step1_baseline_c0'));
     addpath(fullfile(output_dir, 'step2_advanced_controllers'));
     addpath(fullfile(output_dir, 'step3_adaptive_rls'));
@@ -56,9 +57,9 @@ function generate_step3b_phase0_data()
     iL_actual = max(-Imax, min(Imax, iL_cmd));
     iR_actual = max(-Imax, min(Imax, iR_cmd));
     
-    % 测试工况列表: r = 0.70 (工况 A) 与 r = 1.30 (工况 B)
-    r_list = [0.70, 1.30];
-    case_names = {'r070', 'r130'};
+    % 测试工况列表: r = 0.70 (工况 A), r = 1.30 (工况 B) 与 r = 1.00 (对称零偏差基准)
+    r_list = [0.70, 1.30, 1.00];
+    case_names = {'r070', 'r130', 'phase1_sym'};
     
     for c = 1:length(r_list)
         r_val = r_list(c);
@@ -177,7 +178,11 @@ function generate_step3b_phase0_data()
         data_step3b.phi_Delta_T = phi_Delta_T;
         data_step3b.y_Delta_T   = y_Delta_T;
         
-        save_file = fullfile(script_dir, sprintf('data_step3b_phase0_%s.mat', case_tag));
+        if strcmp(case_tag, 'phase1_sym')
+            save_file = fullfile(script_dir, 'data_step3b_phase1_sym.mat');
+        else
+            save_file = fullfile(script_dir, sprintf('data_step3b_phase0_%s.mat', case_tag));
+        end
         save(save_file, '-struct', 'data_step3b');
         fprintf('    成功保存: %s\n', save_file);
     end

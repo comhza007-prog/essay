@@ -1,9 +1,9 @@
 %% GANTRY_DYNAMICS_STEP_LEGACY.M - 冻结的重构前 Step 2 原始 RK4 单步推演参考实现
 % =========================================================================
-% Frozen pre-refactor reference.
-% Source commit: 7a41488 (fix(step3a): eliminate silent hardcoded fallback in controller_c3a_rls_robust)
+% Frozen reference fixture.
+% Source commit: 7a41488
+% Do not modify.
 % Original file: step2_advanced_controllers/gantry_dynamics_step.m
-% Do not modify during equivalence validation.
 % =========================================================================
 
 function x_next = gantry_dynamics_step_legacy(x, iL_cmd, iR_cmd, mech, plant, delta_m, d_load, delta_fric, dt, Kf_L, Kf_R)
