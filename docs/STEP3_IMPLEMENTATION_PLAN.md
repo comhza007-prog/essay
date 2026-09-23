@@ -239,7 +239,7 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
   4. **不宣称物理台架实验已验证**；
   5. **所有提交均在本地 Git 完成，严禁 `git push`**。
 
-### 2. 标定与推力分配严格数学模型
+### 2. 标定与推力分配严格数学模型与限幅源溯源
 1. **推力系数离线标定重构与正值校验**：
    $$\hat{K}_{f,L} = K_{f,\text{mean}} + \frac{1}{2}\hat{\Delta K}_f, \quad \hat{K}_{f,R} = K_{f,\text{mean}} - \frac{1}{2}\hat{\Delta K}_f$$
    断言要求：$\hat{K}_{f,L} > 0, \hat{K}_{f,R} > 0$ 且均为正有限值。
@@ -247,49 +247,74 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
    引入标定无量纲增益因子 $\gamma_L, \gamma_R$：
    $$\gamma_L = \frac{K_{f,\text{mean}}}{\hat{K}_{f,L}}, \quad \gamma_R = \frac{K_{f,\text{mean}}}{\hat{K}_{f,R}}$$
    断言要求：$\gamma_L > 0, \gamma_R > 0$。
-3. **电流补偿与物理饱和处理时序**：
+3. **权威电流限幅源与双场景定义**：
+   - **标称硬件限幅源 (Nominal Hardware Limit)**：严格读取自 `param_init.ctrl.spd_max_out = 16000.0 counts`（CAN 总线电流上限，源自电机驱动固件 `motor.h`）；
+   - **显式人工降额测试场景 (Derated Limit Scenario)**：独立定义 `Imax_derated = 4500.0 counts`（显式模拟实验室安全保护或低速降额场景）；
+   - 启动一致性断言：`assert(Imax_nominal == ctrl.spd_max_out)`；降额场景显式标记 `is_derated_limit = true`；
+   - 函数调用规范：`analyze_step3b_calibration` 强制显式传入 `Imax`，严格禁止使用隐含默认值。
+4. **电流补偿与物理饱和处理时序**：
    严格执行“先增益缩放，后物理限幅”的时序：
    $$i_{L,\text{comp\_cmd}}(t) = \gamma_L \cdot i_{L,\text{nom}}(t), \quad i_{R,\text{comp\_cmd}}(t) = \gamma_R \cdot i_{R,\text{nom}}(t)$$
    $$i_{L,\text{applied}}(t) = \text{sat}(i_{L,\text{comp\_cmd}}(t), -I_{\max}, I_{\max}), \quad i_{R,\text{applied}}(t) = \text{sat}(i_{R,\text{comp\_cmd}}(t), -I_{\max}, I_{\max})$$
-4. **严格补偿后偏航力矩残差物理方程**：
+5. **严格补偿后偏航力矩残差物理方程**：
    $$T_{\alpha,\text{comp}}(t) = -\frac{L_e}{2} \left[ K_{f,L} i_{L,\text{applied}}(t) + K_{f,R} i_{R,\text{applied}}(t) \right]$$
    $$T_{\alpha,\text{nom}}(t) = -\frac{L_e}{2} K_{f,\text{mean}} \left[ i_{L,\text{nom}}(t) + i_{R,\text{nom}}(t) \right]$$
    $$e_{T,\text{comp}}(t) \triangleq T_{\alpha,\text{comp}}(t) - T_{\alpha,\text{nom}}(t) = -\frac{L_e}{2} \left[ (K_{f,L} \gamma_L - K_{f,\text{mean}}) i_{L,\text{nom}} + (K_{f,R} \gamma_R - K_{f,\text{mean}}) i_{R,\text{nom}} \right] + \Delta T_{\text{sat}}(t)$$
    未补偿基线偏航力矩残差（$\gamma_L = 1, \gamma_R = 1$）：
    $$e_{T,\text{base}}(t) \triangleq T_{\alpha,\text{base}}(t) - T_{\alpha,\text{nom}}(t)$$
-5. **解耦评估的三阶偏航抑制比**（计算窗口 $W: t \in [0.5, 2.3]\text{ s}$，停顿段 $t \in [3.0, 4.0]\text{ s}$ 独立报告底噪）：
+6. **解耦评估的三阶偏航抑制比**（计算窗口 $W: t \in [0.5, 2.3]\text{ s}$，停顿段 $t \in [3.0, 4.0]\text{ s}$ 独立报告底噪）：
    - $\eta_{\text{ideal}}$：连续理想辨识参数，无电流饱和约束（$I_{\max} = \infty$）；
    - $\eta_{\text{quant}}$：8192 线编码器量化辨识参数，无电流饱和约束；
    - $\eta_{\text{sat}}$：8192 线量化辨识参数，施加实际驱动器电流饱和限幅 $[-I_{\max}, I_{\max}]$。
    - 保护门限：当 $E_{\text{yaw,base}} < 10^{-12}\ \mathrm{N\cdot m}$ 时，状态判定为 `BASELINE_TOO_SMALL`，避免分母除零。
-6. **准静态偏航角偏差推导（限定条件）**：
+7. **准静态偏航角偏差推导（限定条件）**：
    $$\alpha_{\text{ss}} = \frac{E_{\text{yaw}}}{K_\alpha}, \quad \Delta \alpha_{\text{improve}} = 1 - \frac{\alpha_{\text{ss,comp}}}{\alpha_{\text{ss,base}}}$$
    明确限定：此项仅作为物理刚度下的理论静态几何偏差推导，不作为实际台架动态偏航闭环改善。
 
-### 3. Phase 2 全套离线基准测试实测结果 (Tests P1 ~ P7)
-全套评测数据已导出至 [`output/step3_adaptive_rls/step3b_phase2_calibration_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase2_calibration_results.csv)（包含 25 列结构化诊断字段）：
+### 3. Phase 2 双场景全套离线基准测试实测结果 (Tests P1 ~ P7)
+全套评测数据已导出至 [`output/step3_adaptive_rls/step3b_phase2_calibration_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase2_calibration_results.csv)（包含 28 列结构化诊断字段，共 40 组记录）：
 
-| 测试编号 | 测试项目与工况 | 参数来源 | $\gamma_L$ | $\gamma_R$ | $E_{\text{yaw,base}}$ (N·m) | $E_{\text{yaw,comp}}$ (N·m) | $\eta_{\text{ideal}}$ | $\eta_{\text{quant}}$ | $\eta_{\text{sat}}$ | 总饱和率 | 状态判定 |
+#### 场景一：项目标称硬件限幅 (`Imax = 16000.0 counts`, 来源: `param_init.ctrl.spd_max_out`)
+标称运动轨迹峰值电流为 $3120\text{ counts}$，仅占硬件上限的 $19.5\%$；补偿后峰值 $3788.6\text{ counts}$（占 $23.7\%$），**拥有高达 $76.3\%$ 的线性硬件安全裕度**。
+
+| 测试编号 | 测试工况 | 参数来源 | $\gamma_L$ | $\gamma_R$ | $E_{\text{yaw,base}}$ (N·m) | $E_{\text{yaw,comp}}$ (N·m) | $\eta_{\text{ideal}}$ | $\eta_{\text{quant}}$ | $\eta_{\text{sat}}$ | 总饱和率 | 状态判定 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Test P1** | 真实理论基准 ($r=0.70$) | $\Delta K_{f,\text{true}}$ | 1.2143 | 0.8500 | 1.0009 | $3.90\times 10^{-16}$ | 100.0% | - | 100.0% | 0.00% | **PASS** |
-| **Test P1** | 真实理论基准 ($r=1.30$) | $\Delta K_{f,\text{true}}$ | 0.8846 | 1.1500 | 0.7398 | $4.65\times 10^{-16}$ | 100.0% | - | 100.0% | 0.00% | **PASS** |
+| **Test P1** | 理论无损基准 ($r=0.70$) | $\Delta K_{f,\text{true}}$ | 1.2143 | 0.8500 | 1.0009 | $3.90\times 10^{-16}$ | 100.0% | - | 100.0% | 0.00% | **PASS** |
+| **Test P1** | 理论无损基准 ($r=1.30$) | $\Delta K_{f,\text{true}}$ | 0.8846 | 1.1500 | 0.7398 | $4.65\times 10^{-16}$ | 100.0% | - | 100.0% | 0.00% | **PASS** |
 | **Test P2** | 负向连续标定 ($r=0.70$) | Phase 1 Test B | 1.2144 | 0.8499 | 1.0009 | $5.48\times 10^{-4}$ | **99.945%** | - | **99.945%** | 0.00% | **PASS** |
 | **Test P3** | 正向连续标定 ($r=1.30$) | Phase 1 Test C | 0.8845 | 1.1501 | 0.7398 | $5.26\times 10^{-4}$ | **99.929%** | - | **99.929%** | 0.00% | **PASS** |
 | **Test P4** | 量化级联标定 ($r=0.70$) | Phase 1 Test D | 1.2144 | 0.8499 | 1.0009 | $5.80\times 10^{-4}$ | - | **99.942%** | **99.942%** | 0.00% | **PASS** |
 | **Test P4** | 量化级联标定 ($r=1.30$) | Phase 1 Test D | 0.8845 | 1.1501 | 0.7398 | $6.01\times 10^{-4}$ | - | **99.919%** | **99.919%** | 0.00% | **PASS** |
 | **Test P5** | 截断工况未受限 ($K_\alpha+20\%$) | Phase 1 Test E Unproj | 0.8643 | 1.1863 | 0.7398 | 0.1550 | - | - | 79.045% | 0.00% | **CALIBRATION_CLIPPED** |
 | **Test P5** | 截断工况保界值 ($K_\alpha+20\%$) | Phase 1 Test E Proj | 0.8704 | 1.1750 | 0.7398 | 0.1076 | - | - | 85.458% | 0.00% | **CALIBRATION_CLIPPED** |
-| **Test P6** | 电流饱和扫描 ($0.25 I_{\max}$) | Scan $0.25 I_{\max}$ | 1.2144 / 0.8845 | 0.8499 / 1.1501 | 0.3609 / 0.2668 | $1.97\times 10^{-4}$ / $1.90\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
-| **Test P6** | 电流饱和扫描 ($0.50 I_{\max}$) | Scan $0.50 I_{\max}$ | 同上 | 同上 | 0.7218 / 0.5335 | $3.95\times 10^{-4}$ / $3.80\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
-| **Test P6** | 电流饱和扫描 ($0.75 I_{\max}$) | Scan $0.75 I_{\max}$ | 同上 | 同上 | 1.0827 / 0.8003 | $5.92\times 10^{-4}$ / $5.69\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
-| **Test P6** | 电流饱和扫描 ($1.00 I_{\max}$) | Scan $1.00 I_{\max}$ | 同上 | 同上 | 1.4436 / 1.0670 | 0.2562 / 0.2074 | 99.95% / 99.93% | - | 82.25% / 80.56% | 8.55% / 6.07% | **FAIL_DUE_TO_SATURATION** |
-| **Test P6** | 电流饱和扫描 ($1.25 I_{\max}$) | Scan $1.25 I_{\max}$ | 同上 | 同上 | 1.6945 / 1.3437 | 0.8170 / 0.7639 | 99.94% / 99.93% | - | 51.78% / 43.15% | 13.05% / 11.67% | **FAIL_DUE_TO_SATURATION** |
+| **Test P6** | 电流扫描 ($0.25 I_{\max} = 4000\text{ ct}$) | Scan $0.25 I_{\max}$ | 1.2144 / 0.8845 | 0.8499 / 1.1501 | 1.2832 / 0.9485 | $7.02\times 10^{-4}$ / $6.75\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
+| **Test P6** | 电流扫描 ($0.50 I_{\max} = 8000\text{ ct}$) | Scan $0.50 I_{\max}$ | 同上 | 同上 | 2.5664 / 1.8969 | $1.40\times 10^{-3}$ / $1.35\times 10^{-3}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
+| **Test P6** | 电流扫描 ($0.75 I_{\max} = 12000\text{ ct}$) | Scan $0.75 I_{\max}$ | 同上 | 同上 | 3.8497 / 2.8454 | $2.11\times 10^{-3}$ / $2.02\times 10^{-3}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
+| **Test P6** | 电流扫描 ($1.00 I_{\max} = 16000\text{ ct}$) | Scan $1.00 I_{\max}$ | 同上 | 同上 | 5.1329 / 3.7939 | 0.9111 / 0.7374 | 99.95% / 99.93% | - | 82.25% / 80.56% | 8.55% / 6.07% | **FAIL_DUE_TO_SATURATION** |
+| **Test P6** | 电流扫描 ($1.25 I_{\max} = 20000\text{ ct}$) | Scan $1.25 I_{\max}$ | 同上 | 同上 | 6.0247 / 4.7774 | 2.9050 / 2.7160 | 99.94% / 99.93% | - | 51.78% / 43.15% | 13.05% / 11.67% | **FAIL_DUE_TO_SATURATION** |
 | **Test P7** | 标称对称零偏基准 ($r=1.00$) | Phase 1 Test A1 | 1.0000 | 1.0000 | $2.06\times 10^{-16}$ | $2.06\times 10^{-16}$ | - | - | - | 0.00% | **PASS (BASELINE_TOO_SMALL)** |
 
+#### 场景二：显式人工降额测试场景 (`Imax = 4500.0 counts`, 来源: `explicit_derated_scenario`)
+模拟低速安全保护或受限驱动器工况。标称运动补偿后峰值 $3788.6\text{ counts}$ 占降额上限的 $84.2\%$，线性裕度为 $15.8\%$。
+
+| 测试编号 | 测试工况 | 参数来源 | $\gamma_L$ | $\gamma_R$ | $E_{\text{yaw,base}}$ (N·m) | $E_{\text{yaw,comp}}$ (N·m) | $\eta_{\text{ideal}}$ | $\eta_{\text{quant}}$ | $\eta_{\text{sat}}$ | 总饱和率 | 状态判定 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Test P2** | 负向连续标定 ($r=0.70$) | Phase 1 Test B | 1.2144 | 0.8499 | 1.0009 | $5.48\times 10^{-4}$ | **99.945%** | - | **99.945%** | 0.00% | **PASS** |
+| **Test P3** | 正向连续标定 ($r=1.30$) | Phase 1 Test C | 0.8845 | 1.1501 | 0.7398 | $5.26\times 10^{-4}$ | **99.929%** | - | **99.929%** | 0.00% | **PASS** |
+| **Test P4** | 量化级联标定 ($r=0.70$) | Phase 1 Test D | 1.2144 | 0.8499 | 1.0009 | $5.80\times 10^{-4}$ | - | **99.942%** | **99.942%** | 0.00% | **PASS** |
+| **Test P4** | 量化级联标定 ($r=1.30$) | Phase 1 Test D | 0.8845 | 1.1501 | 0.7398 | $6.01\times 10^{-4}$ | - | **99.919%** | **99.919%** | 0.00% | **PASS** |
+| **Test P5** | 截断工况未受限 ($K_\alpha+20\%$) | Phase 1 Test E Unproj | 0.8643 | 1.1863 | 0.7398 | 0.1550 | - | - | 79.045% | 0.00% | **CALIBRATION_CLIPPED** |
+| **Test P5** | 截断工况保界值 ($K_\alpha+20\%$) | Phase 1 Test E Proj | 0.8704 | 1.1750 | 0.7398 | 0.1076 | - | - | 85.458% | 0.00% | **CALIBRATION_CLIPPED** |
+| **Test P6** | 电流扫描 ($0.25 I_{\max} = 1125\text{ ct}$) | Scan $0.25 I_{\max}$ | 1.2144 / 0.8845 | 0.8499 / 1.1501 | 0.3609 / 0.2668 | $1.97\times 10^{-4}$ / $1.90\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
+| **Test P6** | 电流扫描 ($0.50 I_{\max} = 2250\text{ ct}$) | Scan $0.50 I_{\max}$ | 同上 | 同上 | 0.7218 / 0.5335 | $3.95\times 10^{-4}$ / $3.80\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
+| **Test P6** | 电流扫描 ($0.75 I_{\max} = 3375\text{ ct}$) | Scan $0.75 I_{\max}$ | 同上 | 同上 | 1.0827 / 0.8003 | $5.92\times 10^{-4}$ / $5.69\times 10^{-4}$ | 99.95% / 99.93% | - | 99.95% / 99.93% | 0.00% | **PASS** |
+| **Test P6** | 电流扫描 ($1.00 I_{\max} = 4500\text{ ct}$) | Scan $1.00 I_{\max}$ | 同上 | 同上 | 1.4436 / 1.0670 | 0.2562 / 0.2074 | 99.95% / 99.93% | - | 82.25% / 80.56% | 8.55% / 6.07% | **FAIL_DUE_TO_SATURATION** |
+| **Test P6** | 电流扫描 ($1.25 I_{\max} = 5625\text{ ct}$) | Scan $1.25 I_{\max}$ | 同上 | 同上 | 1.6945 / 1.3437 | 0.8170 / 0.7639 | 99.94% / 99.93% | - | 51.78% / 43.15% | 13.05% / 11.67% | **FAIL_DUE_TO_SATURATION** |
+
 ### 4. Phase 2 关键物理发现与结论
-1. **静态重分配补偿有效性**：在未达驱动器物理电流饱和时（$I_{\text{peak}} \le 0.75 I_{\max}$），采用 Phase 1 离线辨识参数求得的 $\gamma_L, \gamma_R$ 能够将推力非对称引起的偏航力矩残差抑制 **$99.9\%$ 以上**（残差 RMS 从 $\sim 1.0\ \mathrm{N\cdot m}$ 降至 $< 6\times 10^{-4}\ \mathrm{N\cdot m}$），理论准静态偏航角偏差降低 **$99.9\%$**；
-2. **饱和破坏对称性机理**：当名义运动电流达到或超过额定极限（$1.00 I_{\max}$ 及 $1.25 I_{\max}$）时，推力较弱侧驱动器因补偿增益大于 1 先行发生电流削顶，导致双轴推力差无法被完全抵消，抑制比恶化至 $80.5\% \sim 82.2\%$ 和 $43.1\% \sim 51.8\%$，被实事求是标记为 **`FAIL_DUE_TO_SATURATION`**；
-3. **保界截断与过补偿权衡 (Test P5)**：在刚度正向大失配（$K_\alpha +20\%$）工况下，物理投影截断值（$+0.0018465\ \mathrm{N/count}$）的实际抑制比（$85.46\%$）优于未截断估计值（$79.05\%$），证明凸集投影有效限制了对弱侧驱动器的过度放大，该工况透明记录为 **`CALIBRATION_CLIPPED`**；
+1. **真实硬件限幅下的高裕度线性补偿**：在项目标称驱动限幅 $I_{\max} = 16000\text{ counts}$ 下，基准运动轨迹的峰值电流（$3120\text{ counts}$）及补偿后峰值（$3788.6\text{ counts}$）仅占上限的 $23.7\%$，驱动器工作在极宽阔的线性不饱和区（裕度达 $76.3\%$），力矩残差抑制比达到 **$99.93\% \sim 99.95\%$**；
+2. **饱和破坏对称性机理的一致性归一规律**：Test P6 扫描表明，当名义运动电流峰值达到限幅上限的 $1.00\times$ 及 $1.25\times$ 时（无论是真实 16000 还是降额 4500），弱侧驱动器（$\gamma > 1$）因补偿放大先行发生物理削顶，导致双轴推力差无法被完全抵消，抑制比分别恶化至 $80.5\% \sim 82.2\%$ 和 $43.1\% \sim 51.8\%$，被实事求是标记为 **`FAIL_DUE_TO_SATURATION`**；
+3. **保界截断与过补偿权衡 (Test P5)**：在刚度正向大失配（$K_\alpha +20\%$）工况下，物理投影截断值（$+0.0018465\ \mathrm{N/count}$）的实际抑制比（$85.46\%$）优于未截断估计值（$79.05\%$），证明紧凑凸集投影能有效约束弱侧驱动器过度放大，两套限幅场景下均透明记录为 **`CALIBRATION_CLIPPED`**；
 4. **范围与隔离承诺坚守**：Phase 2 仅完成开环数据回放和前馈重分配离线标定分析，**闭环控制器与分配器未受任何修改**，所有代码与数据均保留在本地 Git。
 
 

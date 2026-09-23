@@ -17,9 +17,8 @@
 % =========================================================================
 
 function res = analyze_step3b_calibration(dataset, calib, Imax, current_scale)
-    if nargin < 3 || isempty(Imax)
-        Imax = 4500.0;
-    end
+    assert(nargin >= 3 && ~isempty(Imax), ...
+        '必须显式传入 Imax，禁止使用隐含默认限幅');
     if nargin < 4 || isempty(current_scale)
         current_scale = 1.0;
     end
