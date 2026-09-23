@@ -39,9 +39,11 @@ function verify_rls_estimator_delta_kf()
     
     csv_rows = {};
     csv_header = {'Case', 'Test_Item', 'Param_Perturbation', 'Sensor_Mode', ...
-                  'PE_Threshold_count_m', 'Delta_Kf_True', 'Delta_Kf_Est', ...
+                  'PE_Threshold_count_m', 'Delta_Kf_True', ...
+                  'Theta_Unproj_Final', 'Theta_Proj_Final', 'Max_Theta_Unproj', ...
                   'Abs_Error_N_ct', 'Rel_Error_pct', 'Local_Window_Variation_pct', ...
-                  'Transfer_Gain', 'Res_RMS_Nm', 'Proj_Count', 'Max_Theta_Unproj', 'Status'};
+                  'Transfer_Gain', 'Res_RMS_Nm', 'Projection_Count', ...
+                  'Sensitivity_Status', 'Projection_Status'};
               
     % 标称 RLS 配置 (物理精确边界)
     opts_base = struct();
@@ -80,10 +82,14 @@ function verify_rls_estimator_delta_kf()
     y_f_sym_th   = filter(num_w0, den_a, d_sym.y_Delta_T);
     
     est_a1 = rls_estimator_delta_kf(opts_base);
+    theta_unproj_a1 = zeros(N, 1);
     for k = 1:N
         [est_a1, th_k, info_k] = est_a1.update(phi_f_sym_th(k), y_f_sym_th(k));
+        theta_unproj_a1(k) = info_k.theta_unprojected;
     end
     abs_err_a1 = abs(est_a1.theta_hat);
+    max_unproj_a1 = max(abs(theta_unproj_a1));
+    final_unproj_a1 = info_k.theta_unprojected;
     
     fprintf('  理论模型零基线实测:\n');
     fprintf('    最终绝对误差: %.4e N/count (验收指标: <= 1.0e-8 N/count)\n', abs_err_a1);
@@ -93,8 +99,8 @@ function verify_rls_estimator_delta_kf()
     fprintf('  >>> Test A1 理论模型零偏差基线测试: PASS！\n\n');
     
     csv_rows{end+1} = {'Symmetric (r=1.00)', 'TestA1_Theoretical_Zero_Baseline', 'Nominal', 'Theoretical', ...
-        opts_base.sigma_PE_th, 0.0, est_a1.theta_hat, abs_err_a1, 0.0, 0.0, 1.0, 0.0, ...
-        est_a1.projection_count, est_a1.theta_hat, 'PASS'};
+        opts_base.sigma_PE_th, 0.0, final_unproj_a1, est_a1.theta_hat, max_unproj_a1, ...
+        abs_err_a1, 0.0, 0.0, 1.0, 0.0, est_a1.projection_count, 'PASS', 'NO_PROJECTION'};
     
     %% =====================================================================
     %% Test A2: 对称工况传感器重构零基线测试 (Sensor Reconstructed Zero Baseline)
@@ -102,6 +108,7 @@ function verify_rls_estimator_delta_kf()
     fprintf('-------------------------------------------------------------------------\n');
     fprintf('>>> [Test A2] 对称工况传感器重构零基线测试 (build_step3b_regression 重构)\n');
     fprintf('    说明: 从连续传感器重构回归量, 评估因果离散测速产生的残差底噪与估计稳定性\n');
+    fprintf('    验收指标: 稳态绝对误差 <= 5.0e-7 N/count, 稳态均值偏差 <= 5.0e-7 N/count\n');
     fprintf('-------------------------------------------------------------------------\n');
     
     reg_sym = build_step3b_regression( ...
@@ -128,22 +135,25 @@ function verify_rls_estimator_delta_kf()
     steady_std_a2    = std(theta_hist_a2(eval_mask_steady));
     active_ratio_a2  = mean(pe_hist_a2) * 100.0;
     max_unproj_a2    = max(abs(theta_unproj_a2));
+    final_unproj_a2  = theta_unproj_a2(end);
     diff_noproj_a2   = abs(est_a2.theta_hat - est_a2_noproj.theta_hat);
     
     fprintf('  传感器重构零基线实测:\n');
-    fprintf('    最终绝对误差: %.4e N/count (占 Kf_mean 仅 %.4f%%, 属于数值测速差分底噪)\n', ...
+    fprintf('    最终绝对误差: %.4e N/count (占 Kf_mean 仅 %.4f%%, 指标: <= 5.0e-7 N/count)\n', ...
         final_abs_err_a2, (final_abs_err_a2 / d_sym.Kf_mean)*100);
-    fprintf('    停顿稳态均值: %.4e N/count | 稳态标准差: %.4e N/count\n', steady_mean_a2, steady_std_a2);
+    fprintf('    停顿稳态均值: %.4e N/count (指标: <= 5.0e-7 N/count) | 稳态标准差: %.4e N/count\n', steady_mean_a2, steady_std_a2);
     fprintf('    PE 激活比例: %.1f%% | 投影触发次数: %d | 无投影对照差异: %.2e N/count\n', ...
         active_ratio_a2, est_a2.projection_count, diff_noproj_a2);
     
+    assert(final_abs_err_a2 <= 5.0e-7, 'Test A2 对称传感器零基线误差超限！');
+    assert(abs(steady_mean_a2) <= 5.0e-7, 'Test A2 稳态零偏差超限！');
     assert(est_a2.projection_count == 0, 'Test A2 正常重构工况下异常触发投影截断！');
     assert(diff_noproj_a2 == 0.0, 'Test A2 有投影与无投影估计出现偏离！');
     fprintf('  >>> Test A2 传感器重构零基线测试: PASS！\n\n');
     
     csv_rows{end+1} = {'Symmetric (r=1.00)', 'TestA2_SensorRecon_Zero_Baseline', 'Nominal', 'Ideal', ...
-        opts_base.sigma_PE_th, 0.0, theta_hist_a2(end), final_abs_err_a2, 0.0, ...
-        steady_std_a2, 1.0, 0.0, est_a2.projection_count, max_unproj_a2, 'PASS'};
+        opts_base.sigma_PE_th, 0.0, final_unproj_a2, theta_hist_a2(end), max_unproj_a2, ...
+        final_abs_err_a2, 0.0, steady_std_a2, 1.0, 0.0, est_a2.projection_count, 'PASS', 'NO_PROJECTION'};
     
     %% =====================================================================
     %% Test B: 负向非对称开环收敛测试 (r = 0.70, Delta_Kf_true < 0)
@@ -172,12 +182,13 @@ function verify_rls_estimator_delta_kf()
         pe_hist_b(k)      = info_k.is_pe;
     end
     
-    final_th_b    = theta_hist_b(end);
-    rel_err_b     = abs(final_th_b - d_r070.Delta_Kf_true) / abs(d_r070.Delta_Kf_true) * 100.0;
-    res_rms_b     = sqrt(mean((reg_r070.y_f(eval_mask_steady) - reg_r070.phi_f(eval_mask_steady) * final_th_b).^2));
-    max_unproj_b  = max(abs(theta_unproj_b));
-    diff_noproj_b = abs(est_b.theta_hat - est_b_noproj.theta_hat);
-    is_frozen_b   = all(theta_hist_b(eval_mask_steady) == final_th_b);
+    final_th_b      = theta_hist_b(end);
+    rel_err_b       = abs(final_th_b - d_r070.Delta_Kf_true) / abs(d_r070.Delta_Kf_true) * 100.0;
+    res_rms_b       = sqrt(mean((reg_r070.y_f(eval_mask_steady) - reg_r070.phi_f(eval_mask_steady) * final_th_b).^2));
+    max_unproj_b    = max(abs(theta_unproj_b));
+    final_unproj_b  = theta_unproj_b(end);
+    diff_noproj_b   = abs(est_b.theta_hat - est_b_noproj.theta_hat);
+    is_frozen_b     = all(theta_hist_b(eval_mask_steady) == final_th_b);
     
     fprintf('  负向非对称估计实测:\n');
     fprintf('    真值: %+.7f N/count | 估计值: %+.7f N/count | 相对误差: %.4f%% (指标: <= 5.0%%)\n', ...
@@ -195,8 +206,8 @@ function verify_rls_estimator_delta_kf()
     fprintf('  >>> Test B 负向非对称开环收敛测试: PASS！\n\n');
     
     csv_rows{end+1} = {'r070 (Delta_Kf < 0)', 'TestB_Negative_Asym', 'Nominal', 'Ideal', ...
-        opts_base.sigma_PE_th, d_r070.Delta_Kf_true, final_th_b, abs(final_th_b - d_r070.Delta_Kf_true), ...
-        rel_err_b, 0.0, 1.0, res_rms_b, est_b.projection_count, max_unproj_b, 'PASS'};
+        opts_base.sigma_PE_th, d_r070.Delta_Kf_true, final_unproj_b, final_th_b, max_unproj_b, ...
+        abs(final_th_b - d_r070.Delta_Kf_true), rel_err_b, 0.0, 1.0, res_rms_b, est_b.projection_count, 'PASS', 'NO_PROJECTION'};
     
     %% =====================================================================
     %% Test C: 正向非对称开环收敛测试 (r = 1.30, Delta_Kf_true > 0)
@@ -225,12 +236,13 @@ function verify_rls_estimator_delta_kf()
         pe_hist_c(k)      = info_k.is_pe;
     end
     
-    final_th_c    = theta_hist_c(end);
-    rel_err_c     = abs(final_th_c - d_r130.Delta_Kf_true) / abs(d_r130.Delta_Kf_true) * 100.0;
-    res_rms_c     = sqrt(mean((reg_r130.y_f(eval_mask_steady) - reg_r130.phi_f(eval_mask_steady) * final_th_c).^2));
-    max_unproj_c  = max(abs(theta_unproj_c));
-    diff_noproj_c = abs(est_c.theta_hat - est_c_noproj.theta_hat);
-    is_frozen_c   = all(theta_hist_c(eval_mask_steady) == final_th_c);
+    final_th_c      = theta_hist_c(end);
+    rel_err_c       = abs(final_th_c - d_r130.Delta_Kf_true) / abs(d_r130.Delta_Kf_true) * 100.0;
+    res_rms_c       = sqrt(mean((reg_r130.y_f(eval_mask_steady) - reg_r130.phi_f(eval_mask_steady) * final_th_c).^2));
+    max_unproj_c    = max(abs(theta_unproj_c));
+    final_unproj_c  = theta_unproj_c(end);
+    diff_noproj_c   = abs(est_c.theta_hat - est_c_noproj.theta_hat);
+    is_frozen_c     = all(theta_hist_c(eval_mask_steady) == final_th_c);
     
     fprintf('  正向非对称估计实测:\n');
     fprintf('    真值: %+.7f N/count | 估计值: %+.7f N/count | 相对误差: %.4f%% (指标: <= 5.0%%)\n', ...
@@ -248,8 +260,8 @@ function verify_rls_estimator_delta_kf()
     fprintf('  >>> Test C 正向非对称开环收敛测试: PASS！\n\n');
     
     csv_rows{end+1} = {'r130 (Delta_Kf > 0)', 'TestC_Positive_Asym', 'Nominal', 'Ideal', ...
-        opts_base.sigma_PE_th, d_r130.Delta_Kf_true, final_th_c, abs(final_th_c - d_r130.Delta_Kf_true), ...
-        rel_err_c, 0.0, 1.0, res_rms_c, est_c.projection_count, max_unproj_c, 'PASS'};
+        opts_base.sigma_PE_th, d_r130.Delta_Kf_true, final_unproj_c, final_th_c, max_unproj_c, ...
+        abs(final_th_c - d_r130.Delta_Kf_true), rel_err_c, 0.0, 1.0, res_rms_c, est_c.projection_count, 'PASS', 'NO_PROJECTION'};
     
     %% =====================================================================
     %% Test D: 8192 线位置编码器量化抗噪测试 (q_y = 1.21 um, 理想电流指令)
@@ -285,8 +297,10 @@ function verify_rls_estimator_delta_kf()
             pe_hist_q(k)   = info_k.is_pe;
         end
         
-        final_th_q = th_hist_q(end);
-        rel_err_q  = abs(final_th_q - ds.Delta_Kf_true) / abs(ds.Delta_Kf_true) * 100.0;
+        final_th_q     = th_hist_q(end);
+        rel_err_q      = abs(final_th_q - ds.Delta_Kf_true) / abs(ds.Delta_Kf_true) * 100.0;
+        final_unproj_q = th_unproj_q(end);
+        max_unproj_q   = max(abs(th_unproj_q));
         
         strong_ref = (ds.t >= 0.5 & ds.t <= 2.3);
         dwell_ref  = (ds.t >= 3.0 & ds.t <= 4.0);
@@ -305,7 +319,7 @@ function verify_rls_estimator_delta_kf()
         fprintf('    局部窗口变异率: %.4f%% (指标: <= 5.0%%) | 停顿误动率: %.2f%% | 强激漏动率: %.2f%%\n', ...
             var_pct, false_act, miss_act);
         fprintf('    投影触发次数: %d | 未投影最大绝对值: %.4e N/count | 无投影对照差异: %.2e\n', ...
-            est_quant.projection_count, max(abs(th_unproj_q)), diff_noproj_q);
+            est_quant.projection_count, max_unproj_q, diff_noproj_q);
         
         assert(rel_err_q <= 5.0, 'Test D 量化估计相对误差超限！');
         assert(var_pct <= 5.0, 'Test D 局部窗口变异率超限！');
@@ -315,8 +329,8 @@ function verify_rls_estimator_delta_kf()
         assert(diff_noproj_q == 0.0, 'Test D 无投影对照出现偏差！');
         
         csv_rows{end+1} = {case_tag, 'TestD_Quantized_RLS', 'Nominal', 'Position_Quantized_Only', ...
-            opts_base.sigma_PE_th, ds.Delta_Kf_true, final_th_q, abs(final_th_q - ds.Delta_Kf_true), ...
-            rel_err_q, var_pct, 1.0, res_rms_q, est_quant.projection_count, max(abs(th_unproj_q)), 'PASS'};
+            opts_base.sigma_PE_th, ds.Delta_Kf_true, final_unproj_q, final_th_q, max_unproj_q, ...
+            abs(final_th_q - ds.Delta_Kf_true), rel_err_q, var_pct, 1.0, res_rms_q, est_quant.projection_count, 'PASS', 'NO_PROJECTION'};
     end
     fprintf('  >>> Test D 8192 线位置编码器量化抗噪测试: PASS！\n\n');
     
@@ -335,9 +349,9 @@ function verify_rls_estimator_delta_kf()
         ds = datasets_quant{c};
         case_tag = tags_quant{c};
         
-        fprintf('  =======================================================================\n');
+        fprintf('  =======================================================================================================\n');
         fprintf('  工况: %s\n', case_tag);
-        fprintf('  摄动参数  |  摄动比例  | Delta_Kf_真值 | Delta_Kf_估计 | 估计偏差(%%) | 误差传递增益 | 投影触发 | 残差RMS(Nm)\n');
+        fprintf('  摄动参数  |  比例  | Delta_Kf真值 | 未投影最终值 | 投影输出值   | 未投影最大值 | 估计偏差(%%) | 传递增益 | 投影次数 | 敏感性判定             | 投影安全状态\n');
         
         for p_idx = 1:length(params_to_test)
             param_name = params_to_test{p_idx};
@@ -361,27 +375,51 @@ function verify_rls_estimator_delta_kf()
                     ds.dt, mech_pert, plant_pert, ds.Kf_mean, 'quantized');
                 
                 est_pert = rls_estimator_delta_kf(opts_base);
+                est_pert_noproj = rls_estimator_delta_kf(opts_noproj);
+                max_theta_unproj = 0.0;
+                
                 for k = 1:N
                     [est_pert, th_k, info_k] = est_pert.update(reg_pert.phi_f(k), reg_pert.y_f(k));
+                    [est_pert_noproj, th_noproj_k, info_noproj_k] = est_pert_noproj.update(reg_pert.phi_f(k), reg_pert.y_f(k));
+                    max_theta_unproj = max(max_theta_unproj, abs(info_noproj_k.theta_unprojected));
                 end
                 
-                final_th_pert = est_pert.theta_hat;
+                final_theta_unproj   = est_pert_noproj.theta_hat;
+                final_th_pert        = est_pert.theta_hat;
+                
+                bias_unproj_pct      = (final_theta_unproj - ds.Delta_Kf_true) / ds.Delta_Kf_true * 100.0;
+                transfer_gain_unproj = (bias_unproj_pct / 100.0) / delta_pct;
+                
                 bias_pct      = (final_th_pert - ds.Delta_Kf_true) / ds.Delta_Kf_true * 100.0;
                 transfer_gain = (bias_pct / 100.0) / delta_pct;
                 res_rms_pert  = sqrt(mean((reg_pert.y_f(eval_mask_steady) - reg_pert.phi_f(eval_mask_steady) * final_th_pert).^2));
                 
-                fprintf('  %-9s |   %+5.1f%%   |  %+11.7f  |  %+11.7f  |   %+6.2f%%   |    %5.3f    |    %2d    |  %.2e\n', ...
-                    param_name, delta_pct*100, ds.Delta_Kf_true, final_th_pert, bias_pct, transfer_gain, ...
-                    est_pert.projection_count, res_rms_pert);
+                % 分离敏感性识别结果与投影安全结果
+                if est_pert.projection_count == 0
+                    sens_status = 'PASS';
+                    proj_status = 'NO_PROJECTION';
+                    fprintf('  %-9s | %+5.1f%% | %+11.7f | %+11.7f | %+11.7f | %+11.7f |   %+6.2f%%   |  %5.3f   |   %4d   | %-22s | %s\n', ...
+                        param_name, delta_pct*100, ds.Delta_Kf_true, final_theta_unproj, final_th_pert, max_theta_unproj, ...
+                        bias_pct, transfer_gain, est_pert.projection_count, sens_status, proj_status);
+                else
+                    sens_status = 'IDENTIFICATION_CLIPPED';
+                    proj_status = 'PROJECTION_ACTIVE_CLAMPED';
+                    fprintf('  %-9s | %+5.1f%% | %+11.7f | %+11.7f | %+11.7f | %+11.7f |   %+6.2f%%   |  %5.3f*  |   %4d   | %-22s | %s\n', ...
+                        param_name, delta_pct*100, ds.Delta_Kf_true, final_theta_unproj, final_th_pert, max_theta_unproj, ...
+                        bias_pct, transfer_gain, est_pert.projection_count, sens_status, proj_status);
+                    fprintf('            (注: 未受限估计 = %+.7f, 真实传递增益 = %5.3f; 投影将估计截断保界至 %+.7f, 增益压低为 %5.3f)\n', ...
+                        final_theta_unproj, transfer_gain_unproj, final_th_pert, transfer_gain);
+                end
                 
                 csv_rows{end+1} = {case_tag, 'TestE_Sensitivity_RLS', sprintf('%s_%+d%%', param_name, round(delta_pct*100)), ...
-                    'Position_Quantized_Only', opts_base.sigma_PE_th, ds.Delta_Kf_true, final_th_pert, ...
+                    'Position_Quantized_Only', opts_base.sigma_PE_th, ds.Delta_Kf_true, ...
+                    final_theta_unproj, final_th_pert, max_theta_unproj, ...
                     abs(final_th_pert - ds.Delta_Kf_true), bias_pct, NaN, transfer_gain, res_rms_pert, ...
-                    est_pert.projection_count, final_th_pert, 'PASS'};
+                    est_pert.projection_count, sens_status, proj_status};
             end
         end
     end
-    fprintf('  >>> Test E 结构参数误差敏感性测试: PASS！\n\n');
+    fprintf('  >>> Test E 结构参数误差敏感性测试: PASS (已分离记录投影截断状态)！\n\n');
     
     %% =====================================================================
     %% Test F: 越界投影与协方差稳定性测试 (物理边界与对称边界)
@@ -390,7 +428,7 @@ function verify_rls_estimator_delta_kf()
     fprintf('>>> [Test F] 越界投影与协方差稳定性测试\n');
     fprintf('    验证: 1. 极端冲击下触发投影截断并防止越界\n');
     fprintf('          2. 记录 theta_unprojected 确实溢出, theta_projected 严格落在边界内\n');
-    fprintf('          3. 协方差不发散 (P_min <= P <= P_max)\n');
+    fprintf('          3. 协方差不发散 (P_min <= P <= P_max 且为有限值)\n');
     fprintf('          4. 持续零 PE 静止段协方差绝对不风积\n');
     fprintf('-------------------------------------------------------------------------\n');
     
@@ -414,6 +452,7 @@ function verify_rls_estimator_delta_kf()
     fprintf('    投影触发标志: %s | 协方差 P: %.4e ((N/count)^2)\n', ...
         mat2str(info_f1_pos.is_projected), info_f1_pos.P_next);
     
+    assert(info_f1_pos.is_pe, 'F1 正向冲击时刻 PE 必须激活！');
     assert(info_f1_pos.theta_unprojected > opts_base.theta_max, '未投影状态未能检测到正向溢出！');
     assert(abs(info_f1_pos.theta_projected - opts_base.theta_max) < 1e-12, '投影截断未能精确限制在物理上界！');
     assert(isfinite(info_f1_pos.theta_projected), '投影输出存在非有限值！');
@@ -429,9 +468,12 @@ function verify_rls_estimator_delta_kf()
     fprintf('    投影触发标志: %s | 协方差 P: %.4e ((N/count)^2)\n', ...
         mat2str(info_f1_neg.is_projected), info_f1_neg.P_next);
     
+    assert(info_f1_neg.is_pe, 'F2 负向冲击时刻 PE 必须激活！');
     assert(info_f1_neg.theta_unprojected < opts_base.theta_min, '未投影状态未能检测到负向溢出！');
     assert(abs(info_f1_neg.theta_projected - opts_base.theta_min) < 1e-12, '投影截断未能精确限制在物理下界！');
     assert(isfinite(info_f1_neg.theta_projected), '投影输出存在非有限值！');
+    assert(isfinite(info_f1_neg.P_next), 'F2 负向冲击后协方差必须为有限值！');
+    assert(info_f1_neg.P_next >= opts_base.P_min && info_f1_neg.P_next <= opts_base.P_max, 'F2 协方差越界！');
     
     % F3: 持续零 PE 静止段协方差风积检验 (lambda = 0.98 遗忘测试)
     opts_forget = opts_base;
@@ -458,13 +500,15 @@ function verify_rls_estimator_delta_kf()
         [est_f4, ~, ~] = est_f4.update(phi_surge, 0.0);
     end
     [est_f4, ~, info_f4] = est_f4.update(phi_surge, y_surge_pos);
+    assert(info_f4.is_pe, 'F4 对称边界冲击时刻 PE 必须激活！');
     assert(abs(info_f4.theta_projected - opts_sym_bounds.theta_max) < 1e-12, '对称工程边界截断未通过！');
     
     fprintf('  >>> Test F 越界投影与协方差稳定性测试: PASS！\n\n');
     
     csv_rows{end+1} = {'Extreme_Disturbance', 'TestF_Projection_Stability', 'Surge_Disturbance', ...
-        'Theoretical', opts_base.sigma_PE_th, NaN, info_f1_pos.theta_projected, 0.0, 0.0, 0.0, ...
-        1.0, 0.0, est_f1.projection_count, info_f1_pos.theta_unprojected, 'PASS'};
+        'Theoretical', opts_base.sigma_PE_th, NaN, ...
+        info_f1_pos.theta_unprojected, info_f1_pos.theta_projected, abs(info_f1_pos.theta_unprojected), ...
+        0.0, 0.0, 0.0, 1.0, 0.0, est_f1.projection_count, 'N/A', 'PASS'};
     
     %% =====================================================================
     %% 导出结构化评测 CSV
@@ -474,9 +518,9 @@ function verify_rls_estimator_delta_kf()
     fprintf(fid, '%s\n', strjoin(csv_header, ','));
     for i = 1:length(csv_rows)
         row = csv_rows{i};
-        fprintf(fid, '%s,%s,%s,%s,%.1f,%.7e,%.7e,%.4e,%.4f,%.4f,%.4f,%.4e,%d,%.7e,%s\n', ...
+        fprintf(fid, '%s,%s,%s,%s,%.1f,%.7e,%.7e,%.7e,%.7e,%.4e,%.4f,%.4f,%.4f,%.4e,%d,%s,%s\n', ...
             row{1}, row{2}, row{3}, row{4}, row{5}, row{6}, row{7}, row{8}, ...
-            row{9}, row{10}, row{11}, row{12}, row{13}, row{14}, row{15});
+            row{9}, row{10}, row{11}, row{12}, row{13}, row{14}, row{15}, row{16}, row{17});
     end
     fclose(fid);
     fprintf('>>> Phase 1 结构化量化评测指标已成功导出至: %s\n', csv_file);

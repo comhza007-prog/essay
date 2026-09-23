@@ -1,20 +1,20 @@
-Case,Test_Item,Param_Perturbation,Sensor_Mode,PE_Threshold_count_m,Delta_Kf_True,Delta_Kf_Est,Abs_Error_N_ct,Rel_Error_pct,Local_Window_Variation_pct,Transfer_Gain,Res_RMS_Nm,Proj_Count,Max_Theta_Unproj,Status
-Symmetric (r=1.00),TestA1_Theoretical_Zero_Baseline,Nominal,Theoretical,50.0,0.0000000e+00,9.3348553e-21,9.3349e-21,0.0000,0.0000,1.0000,0.0000e+00,0,9.3348553e-21,PASS
-Symmetric (r=1.00),TestA2_SensorRecon_Zero_Baseline,Nominal,Ideal,50.0,0.0000000e+00,1.6000389e-07,1.6000e-07,0.0000,0.0000,1.0000,0.0000e+00,0,3.5924292e-06,PASS
-r070 (Delta_Kf < 0),TestB_Negative_Asym,Nominal,Ideal,50.0,-2.1875000e-03,-2.1886608e-03,1.1608e-06,0.0531,0.0000,1.0000,1.8395e-06,0,2.1921123e-03,PASS
-r130 (Delta_Kf > 0),TestC_Positive_Asym,Nominal,Ideal,50.0,1.6168478e-03,1.6179774e-03,1.1296e-06,0.0699,0.0000,1.0000,7.2125e-07,0,1.6263762e-03,PASS
-r070 (Delta_Kf < 0),TestD_Quantized_RLS,Nominal,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1887303e-03,1.2303e-06,0.0562,0.0288,1.0000,2.5925e-04,0,2.1929399e-03,PASS
-r130 (Delta_Kf > 0),TestD_Quantized_RLS,Nominal,Position_Quantized_Only,50.0,1.6168478e-03,1.6181376e-03,1.2897e-06,0.0798,0.0436,1.0000,8.8321e-04,0,1.6268624e-03,PASS
-r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,K_alpha_-20%,Position_Quantized_Only,50.0,-2.1875000e-03,-1.7962318e-03,3.9127e-04,-17.8865,NaN,0.8943,2.6230e-04,0,-1.7962318e-03,PASS
-r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,K_alpha_+20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.5812288e-03,3.9373e-04,17.9990,NaN,0.9000,2.5637e-04,0,-2.5812288e-03,PASS
-r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,B_alpha_-20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1789830e-03,8.5170e-06,-0.3893,NaN,0.0195,2.5071e-04,0,-2.1789830e-03,PASS
-r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,B_alpha_+20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1984776e-03,1.0978e-05,0.5018,NaN,0.0251,2.6778e-04,0,-2.1984776e-03,PASS
-r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,J0_-20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1940991e-03,6.5991e-06,0.3017,NaN,-0.0151,2.6380e-04,0,-2.1940991e-03,PASS
-r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,J0_+20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1833615e-03,4.1385e-06,-0.1892,NaN,-0.0095,2.5479e-04,0,-2.1833615e-03,PASS
-r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,K_alpha_-20%,Position_Quantized_Only,50.0,1.6168478e-03,1.2893657e-03,3.2748e-04,-20.2544,NaN,1.0127,9.0252e-04,0,1.2893657e-03,PASS
-r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,K_alpha_+20%,Position_Quantized_Only,50.0,1.6168478e-03,1.8464998e-03,2.2965e-04,14.2037,NaN,0.7102,8.6421e-04,1065,1.8464998e-03,PASS
-r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,B_alpha_-20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6088958e-03,7.9520e-06,-0.4918,NaN,0.0246,8.5369e-04,0,1.6088958e-03,PASS
-r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,B_alpha_+20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6273793e-03,1.0531e-05,0.6514,NaN,0.0326,9.1274e-04,0,1.6273793e-03,PASS
-r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,J0_-20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6230688e-03,6.2209e-06,0.3848,NaN,-0.0192,8.9798e-04,0,1.6230688e-03,PASS
-r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,J0_+20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6132064e-03,3.6414e-06,-0.2252,NaN,-0.0113,8.6866e-04,0,1.6132064e-03,PASS
-Extreme_Disturbance,TestF_Projection_Stability,Surge_Disturbance,Theoretical,50.0,NaN,1.8465000e-03,0.0000e+00,0.0000,0.0000,1.0000,0.0000e+00,2,4.9751244e+02,PASS
+Case,Test_Item,Param_Perturbation,Sensor_Mode,PE_Threshold_count_m,Delta_Kf_True,Theta_Unproj_Final,Theta_Proj_Final,Max_Theta_Unproj,Abs_Error_N_ct,Rel_Error_pct,Local_Window_Variation_pct,Transfer_Gain,Res_RMS_Nm,Projection_Count,Sensitivity_Status,Projection_Status
+Symmetric (r=1.00),TestA1_Theoretical_Zero_Baseline,Nominal,Theoretical,50.0,0.0000000e+00,9.3348553e-21,9.3348553e-21,1.2341195e-19,9.3349e-21,0.0000,0.0000,1.0000,0.0000e+00,0,PASS,NO_PROJECTION
+Symmetric (r=1.00),TestA2_SensorRecon_Zero_Baseline,Nominal,Ideal,50.0,0.0000000e+00,1.6000389e-07,1.6000389e-07,3.5924292e-06,1.6000e-07,0.0000,0.0000,1.0000,0.0000e+00,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestB_Negative_Asym,Nominal,Ideal,50.0,-2.1875000e-03,-2.1886608e-03,-2.1886608e-03,2.1921123e-03,1.1608e-06,0.0531,0.0000,1.0000,1.8395e-06,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestC_Positive_Asym,Nominal,Ideal,50.0,1.6168478e-03,1.6179774e-03,1.6179774e-03,1.6263762e-03,1.1296e-06,0.0699,0.0000,1.0000,7.2125e-07,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestD_Quantized_RLS,Nominal,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1887303e-03,-2.1887303e-03,2.1929399e-03,1.2303e-06,0.0562,0.0288,1.0000,2.5925e-04,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestD_Quantized_RLS,Nominal,Position_Quantized_Only,50.0,1.6168478e-03,1.6181376e-03,1.6181376e-03,1.6268624e-03,1.2897e-06,0.0798,0.0436,1.0000,8.8321e-04,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,K_alpha_-20%,Position_Quantized_Only,50.0,-2.1875000e-03,-1.7962318e-03,-1.7962318e-03,2.0251981e-03,3.9127e-04,-17.8865,NaN,0.8943,2.6230e-04,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,K_alpha_+20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.5812288e-03,-2.5812288e-03,2.6098911e-03,3.9373e-04,17.9990,NaN,0.9000,2.5637e-04,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,B_alpha_-20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1789830e-03,-2.1789830e-03,2.1852027e-03,8.5170e-06,-0.3893,NaN,0.0195,2.5071e-04,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,B_alpha_+20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1984776e-03,-2.1984776e-03,2.2309661e-03,1.0978e-05,0.5018,NaN,0.0251,2.6778e-04,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,J0_-20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1940991e-03,-2.1940991e-03,2.1991347e-03,6.5991e-06,0.3017,NaN,-0.0151,2.6380e-04,0,PASS,NO_PROJECTION
+r070 (Delta_Kf < 0),TestE_Sensitivity_RLS,J0_+20%,Position_Quantized_Only,50.0,-2.1875000e-03,-2.1833615e-03,-2.1833615e-03,2.1912832e-03,4.1385e-06,-0.1892,NaN,-0.0095,2.5479e-04,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,K_alpha_-20%,Position_Quantized_Only,50.0,1.6168478e-03,1.2893657e-03,1.2893657e-03,1.3200815e-03,3.2748e-04,-20.2544,NaN,1.0127,9.0252e-04,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,K_alpha_+20%,Position_Quantized_Only,50.0,1.6168478e-03,1.9469095e-03,1.8464998e-03,2.1259073e-03,2.2965e-04,14.2037,NaN,0.7102,8.6421e-04,1065,IDENTIFICATION_CLIPPED,PROJECTION_ACTIVE_CLAMPED
+r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,B_alpha_-20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6088958e-03,1.6088958e-03,1.6110658e-03,7.9520e-06,-0.4918,NaN,0.0246,8.5369e-04,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,B_alpha_+20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6273793e-03,1.6273793e-03,1.6851180e-03,1.0531e-05,0.6514,NaN,0.0326,9.1274e-04,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,J0_-20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6230688e-03,1.6230688e-03,1.6400383e-03,6.2209e-06,0.3848,NaN,-0.0192,8.9798e-04,0,PASS,NO_PROJECTION
+r130 (Delta_Kf > 0),TestE_Sensitivity_RLS,J0_+20%,Position_Quantized_Only,50.0,1.6168478e-03,1.6132064e-03,1.6132064e-03,1.6211941e-03,3.6414e-06,-0.2252,NaN,-0.0113,8.6866e-04,0,PASS,NO_PROJECTION
+Extreme_Disturbance,TestF_Projection_Stability,Surge_Disturbance,Theoretical,50.0,NaN,4.9751244e+02,1.8465000e-03,4.9751244e+02,0.0000e+00,0.0000,0.0000,1.0000,0.0000e+00,2,N/A,PASS

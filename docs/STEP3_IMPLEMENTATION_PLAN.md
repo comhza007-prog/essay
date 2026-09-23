@@ -188,26 +188,41 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
   - **对称工程边界**（覆盖但宽于物理范围）：$[-0.00263, +0.00263]\text{ N/count}$。
 
 ### 2. 六大基准测试实测结果 ([`output/step3_adaptive_rls/verify_rls_estimator_delta_kf.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/verify_rls_estimator_delta_kf.m))
-结果已导出至 [`step3b_phase1_rls_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase1_rls_results.csv)：
-1. **Test A1 (理论模型零偏差基线)**：输入理论回归信号（$\Delta K_{f,\text{true}} = 0$），最终绝对误差 **$9.33\times 10^{-21}\text{ N/count} \le 1.0\times 10^{-8}\text{ N/count}$**，投影次数 $0$，**PASS**；
-2. **Test A2 (传感器重构零基线)**：输入连续传感器重构信号，终点绝对误差 $1.60\times 10^{-7}\text{ N/count}$（占标称推力仅 $0.0026\%$，为测速差分离散底噪），稳态标准差 $2.41\times 10^{-21}$，PE 激活率 $66.6\%$，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，**PASS**；
-3. **Test B (负向非对称 $r=0.70$)**：真值 $-0.0021875$，估计值 **$-0.0021887\text{ N/count}$**，相对误差 **$0.0531\% \le 5.0\%$**，符号正确，停顿段绝对冻结，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，**PASS**；
-4. **Test C (正向非对称 $r=1.30$)**：真值 $+0.0016168$，估计值 **$+0.0016180\text{ N/count}$**，相对误差 **$0.0699\% \le 5.0\%$**，符号正确，停顿段绝对冻结，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，**PASS**；
+全套量化评测指标已导出至 [`step3b_phase1_rls_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase1_rls_results.csv)，包含 17 列完整诊断字段（包括 `Theta_Unproj_Final`, `Theta_Proj_Final`, `Max_Theta_Unproj`, `Projection_Count`, `Sensitivity_Status`, `Projection_Status`）：
+
+1. **Test A1 (理论模型零偏差基线)**：
+   - 输入理论代数回归信号（$\Delta K_{f,\text{true}} = 0$），验证算法本身零偏特性；
+   - 最终绝对误差 **$9.33\times 10^{-21}\text{ N/count} \le 1.0\times 10^{-8}\text{ N/count}$**，投影次数 $0$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**。
+2. **Test A2 (传感器重构零基线)**：
+   - 输入连续传感器重构信号，评估因果离散测速差分底噪与稳态稳定性；
+   - 终点绝对误差 **$1.60\times 10^{-7}\text{ N/count}$**（占标称推力仅 $0.0026\%$），停顿稳态均值 **$1.60\times 10^{-7}\text{ N/count}$**，均严格满足代码显式断言指标 **$\le 5.0\times 10^{-7}\text{ N/count}$**；
+   - 稳态标准差 $2.41\times 10^{-21}$，PE 激活率 $66.6\%$，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**。
+3. **Test B (负向非对称 $r=0.70$)**：
+   - 真值 $-0.0021875\text{ N/count}$，估计值 **$-0.0021887\text{ N/count}$**，相对误差 **$0.0531\% \le 5.0\%$**，负向符号正确恢复，停顿段绝对冻结，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**。
+4. **Test C (正向非对称 $r=1.30$)**：
+   - 真值 $+0.0016168\text{ N/count}$，估计值 **$+0.0016180\text{ N/count}$**，相对误差 **$0.0699\% \le 5.0\%$**，正向符号正确恢复，停顿段绝对冻结，投影次数 $0$，无投影对照偏差 $0.00\text{e}+00$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**。
 5. **Test D (8192 线位置量化抗噪)**：
    - $r=0.70$：估计值 $-0.0021887$，相对误差 **$0.0562\% \le 5.0\%$**，局部窗口估计变异率 **$0.0288\% \le 5.0\%$**，停顿误动 $0.0\%$，强激漏动 $0.0\%$，投影次数 $0$；
    - $r=1.30$：估计值 $+0.0016181$，相对误差 **$0.0798\% \le 5.0\%$**，局部窗口估计变异率 **$0.0436\% \le 5.0\%$**，停顿误动 $0.0\%$，强激漏动 $0.0\%$，投影次数 $0$；
-   - **PASS**；
-6. **Test E (结构参数误差敏感性)**：
-   - $K_\alpha \pm 20\%$：传递增益 $0.894 \sim 1.013$；在 $r=1.30, K_\alpha+20\%$ 极端情况下未受约束值达 $0.00195$，投影机制精准生效将其截断至物理上界 $+0.0018465$；
-   - $B_\alpha \pm 20\%$：传递增益 $0.019 \sim 0.033 \le 0.05$（正交相位抑制）；
-   - $J_0 \pm 20\%$：传递增益 $-0.009 \sim -0.019 \le 0.05$（惯性解耦）；
-   - **PASS**；
+   - 综合评定：Sensitivity: **PASS**，Projection: **NO_PROJECTION**。
+6. **Test E (结构参数误差敏感性与投影截断分离判定)**：
+   - 显式分离“敏感性识别精度（Sensitivity_Status）”与“投影安全保护（Projection_Status）”；
+   - **$B_\alpha \pm 20\%$**：传递增益 $0.019 \sim 0.033 \le 0.05$（正交相位抑制），投影次数 $0$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**；
+   - **$J_0 \pm 20\%$**：传递增益 $-0.009 \sim -0.019 \le 0.05$（惯性解耦），投影次数 $0$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**；
+   - **$K_\alpha -20\%$**：未触及边界，传递增益 $0.894 \sim 1.013$，投影次数 $0$，Sensitivity: **PASS**，Projection: **NO_PROJECTION**；
+   - **$K_\alpha +20\% (r=1.30)$ 关键工况**：
+     - 未受限纯 RLS 估计值为 **$+0.0019469\text{ N/count}$**（真实误差传递增益为 **$1.021$**）；
+     - 物理上界为 **$+0.0018465\text{ N/count}$**，投影机制累计触发 **1065 次**截断，将最终估计值安全钳位在 **$+0.0018465\text{ N/count}$**，有效防止了参数发散；
+     - 判定分类：Projection_Status 评定为 **`PROJECTION_ACTIVE_CLAMPED`**（投影安全机制正常工作）；Sensitivity_Status 准确标记为 **`IDENTIFICATION_CLIPPED`**，明确不将截断后的估计值（增益表观降为 0.710）误用于评价辨识算法的敏感性精度。
 7. **Test F (越界投影与协方差稳定性)**：
-   - 正向极端冲击（$y = +10^6$）：$\theta_{\text{unprojected}} = +497.5\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = +0.0018465\text{ N/count}$ 精确截断在物理上界，协方差 $P = 4.98\times 10^{-7}$ 有界正定；
-   - 负向极端冲击（$y = -10^6$）：$\theta_{\text{unprojected}} = -332.2\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = -0.0026295\text{ N/count}$ 精确截断在物理下界；
-   - 持续零 PE 静止段（$\lambda = 0.98$ 遗忘因子下测试 5000 步零激励）：$|P_{\text{after}} - P_{\text{init}}| < 10^{-15}$，协方差严格绝对冻结，零风积；
-   - 对称工程边界 $[-0.00263, +0.00263]$ 同步通过截断断言；
-   - **PASS**。
+   - 正向极端冲击（$y = +10^6$）：确认 PE 激活（`is_pe == true`），未受约束估计 $\theta_{\text{unprojected}} = +497.5\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = +0.0018465\text{ N/count}$ 精确截断在物理上界，协方差 $P = 4.98\times 10^{-7}$ 有限且处于 $[P_{\min}, P_{\max}]$；
+   - 负向极端冲击（$y = -10^6$）：确认 PE 激活（`is_pe == true`），未受约束估计 $\theta_{\text{unprojected}} = -332.2\text{ N/count}$ 严重越界，$\theta_{\text{projected}} = -0.0026295\text{ N/count}$ 精确截断在物理下界，协方差 $P = 3.32\times 10^{-7}$ 有限且处于 $[P_{\min}, P_{\max}]$；
+   - 持续零 PE 静止段（$\lambda = 0.98$ 激进遗忘下测试 5000 步零激励）：确认零激励下 `~is_pe`，且 $|P_{\text{after}} - P_{\text{init}}| < 10^{-15}$，协方差严格绝对冻结，彻底杜绝风积；
+   - 对称工程边界 $[-0.00263, +0.00263]$ 同步通过冲击保界断言；
+   - 综合评定：Projection: **PASS**。
+
+### 3. Phase 1 正式归档结论与范围边界
+单参数 $\Delta K_f$ 开环 RLS 估计器在理想连续状态和位置量化条件下**通过基准验证**；结构参数失配下的投影截断行为已单独识别并透明记录；**尚未接入闭环，也未包含真实驱动器电流反馈噪声**。
 
 
 
