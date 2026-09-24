@@ -361,9 +361,12 @@ function res = analyze_step3c_trial(base_data, cfg)
     res.exceed_false_ratio     = exceed_false_ratio;
 
     % 评估窗口内时序序列 (用于 C7/C8 统计检验)
-    res.theta_proj_eval     = proj_eval;
-    res.theta_unproj_eval   = unproj_eval;
-    res.P_history_eval      = P_history(mask_eval);
+    res.mask_eval       = mask_eval;
+    res.t_eval_start    = pert_data.t_eval_start;
+    res.t_eval_end      = pert_data.t_eval_end;
+    res.theta_proj_eval = proj_eval;
+    res.theta_unproj_eval = unproj_eval;
+    res.P_history_eval  = P_history(mask_eval);
 
     % 完整时序数据
     res.t                   = t;

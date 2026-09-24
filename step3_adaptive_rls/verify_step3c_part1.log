@@ -49,11 +49,11 @@
          eta_kf_mean:  95.02% | eta_kf_p05:  94.93% | 无效试验数: 0 [PASS]
 
 --- [Test C2] CAN 通信延迟评测 (执行时滞触发 RK4 因果动力学重积分) ---
-  [C2.1] d_act_L=1ms;d_act_R=1ms      -> eta_kf:  99.95% | eta_tot:  99.70% | dalpha_RMS: 5.03e-04 rad [PASS]
-  [C2.2] d_act_L=2ms;d_act_R=2ms      -> eta_kf:  99.95% | eta_tot:  99.40% | dalpha_RMS: 5.03e-04 rad [PASS]
-  [C2.3] d_act_L=3ms;d_act_R=3ms      -> eta_kf:  99.95% | eta_tot:  99.11% | dalpha_RMS: 5.02e-04 rad [PASS]
-  [C2.4] d_act_L=1ms;d_act_R=2ms      -> eta_kf:  99.95% | eta_tot:  97.68% | dalpha_RMS: 5.01e-04 rad [PASS]
-  [C2.5] d_act_L=2ms;d_act_R=1ms      -> eta_kf:  99.93% | eta_tot:  97.80% | dalpha_RMS: 5.05e-04 rad [PASS]
+  [C2.1] d_act_L=1ms;d_act_R=1ms      -> eta_kf:  99.95% | eta_tot:  99.70% | dalpha_RMS: 1.47e-06 rad [PASS]
+  [C2.2] d_act_L=2ms;d_act_R=2ms      -> eta_kf:  99.95% | eta_tot:  99.40% | dalpha_RMS: 2.93e-06 rad [PASS]
+  [C2.3] d_act_L=3ms;d_act_R=3ms      -> eta_kf:  99.95% | eta_tot:  99.11% | dalpha_RMS: 4.40e-06 rad [PASS]
+  [C2.4] d_act_L=1ms;d_act_R=2ms      -> eta_kf:  99.95% | eta_tot:  97.68% | dalpha_RMS: 1.15e-05 rad [PASS]
+  [C2.5] d_act_L=2ms;d_act_R=1ms      -> eta_kf:  99.93% | eta_tot:  97.80% | dalpha_RMS: 1.06e-05 rad [PASS]
   [C2.6] d_meas_L=2ms;d_meas_R=2ms    -> eta_kf:  99.97% | eta_tot:  99.97% | dalpha_RMS: 0.00e+00 rad [PASS]
   [C2.7] d_meas_L=1ms;d_meas_R=2ms    -> eta_kf:  99.97% | eta_tot:  99.97% | dalpha_RMS: 0.00e+00 rad [PASS]
 
@@ -103,11 +103,11 @@
          eta_kf_mean:  91.08% | eta_kf_p05:  90.94% | 无效试验数: 0 [PASS]
 
 --- [Test C2] CAN 通信延迟评测 (执行时滞触发 RK4 因果动力学重积分) ---
-  [C2.1] d_act_L=1ms;d_act_R=1ms      -> eta_kf:  99.93% | eta_tot:  99.60% | dalpha_RMS: 3.71e-04 rad [PASS]
-  [C2.2] d_act_L=2ms;d_act_R=2ms      -> eta_kf:  99.93% | eta_tot:  99.21% | dalpha_RMS: 3.71e-04 rad [PASS]
-  [C2.3] d_act_L=3ms;d_act_R=3ms      -> eta_kf:  99.93% | eta_tot:  98.81% | dalpha_RMS: 3.71e-04 rad [PASS]
-  [C2.4] d_act_L=1ms;d_act_R=2ms      -> eta_kf:  99.92% | eta_tot:  96.82% | dalpha_RMS: 3.73e-04 rad [PASS]
-  [C2.5] d_act_L=2ms;d_act_R=1ms      -> eta_kf:  99.95% | eta_tot:  97.07% | dalpha_RMS: 3.69e-04 rad [PASS]
+  [C2.1] d_act_L=1ms;d_act_R=1ms      -> eta_kf:  99.93% | eta_tot:  99.60% | dalpha_RMS: 1.47e-06 rad [PASS]
+  [C2.2] d_act_L=2ms;d_act_R=2ms      -> eta_kf:  99.93% | eta_tot:  99.21% | dalpha_RMS: 2.94e-06 rad [PASS]
+  [C2.3] d_act_L=3ms;d_act_R=3ms      -> eta_kf:  99.93% | eta_tot:  98.81% | dalpha_RMS: 4.40e-06 rad [PASS]
+  [C2.4] d_act_L=1ms;d_act_R=2ms      -> eta_kf:  99.92% | eta_tot:  96.82% | dalpha_RMS: 1.15e-05 rad [PASS]
+  [C2.5] d_act_L=2ms;d_act_R=1ms      -> eta_kf:  99.95% | eta_tot:  97.07% | dalpha_RMS: 1.06e-05 rad [PASS]
   [C2.6] d_meas_L=2ms;d_meas_R=2ms    -> eta_kf:  99.95% | eta_tot:  99.95% | dalpha_RMS: 0.00e+00 rad [PASS]
   [C2.7] d_meas_L=1ms;d_meas_R=2ms    -> eta_kf:  99.93% | eta_tot:  99.93% | dalpha_RMS: 0.00e+00 rad [PASS]
 

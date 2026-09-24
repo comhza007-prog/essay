@@ -433,9 +433,9 @@ $$\alpha_{\text{raw,pert}}(k) = \frac{y_{R,\text{pert}}(k) - y_{L,\text{pert}}(k
 严禁跨物理量纲直接排序导数。统一输出两类指标：
 1. **单因素物理导数**（仅用于单一物理参数内部灵敏度分析）：
    $$S_{\text{physical}} = \frac{|\text{metric}_{\text{high}} - \text{metric}_{\text{low}}|}{p_{\text{high}} - p_{\text{low}}} \quad [\text{单位: } \text{metric单位} / \text{参数物理单位}]$$
-   增益漂移统一按百分点定义：$\Delta \text{metric} / 4.0\ [\text{单位} / \text{percentage-point}]$。
-2. **范围归一化影响量**（用于全局龙卷风排序）：
-   $$\text{Impact}_p = \max(|\text{metric}_{\text{low}} - \text{metric}_{\text{nom}}|, |\text{metric}_{\text{high}} - \text{metric}_{\text{nom}}|)$$
+   单位动态拼接，例如：`(N/count)/percentage-point`、`(N/count)/m`、`rad/percentage-point`、`rad/m` 等。
+2. **范围影响量**（用于全局龙卷风排序，避免虚假无量纲化归一）：
+   $$\text{Range\_Impact} = \max(|\text{metric}_{\text{low}} - \text{metric}_{\text{nom}}|, |\text{metric}_{\text{high}} - \text{metric}_{\text{nom}}|)$$
    统一建立两个独立龙卷风排行榜：
    - **排行榜 A（估计器参数偏差影响量）**：$\text{metric} = |\hat{\Delta K}_f - \Delta K_f^*|\ [\text{N/count}]$；
    - **排行榜 B（物理偏航残余影响量）**：$\text{metric} = \operatorname{RMS}(\alpha_{\text{comp}})\ [\text{rad}]$。
@@ -446,43 +446,35 @@ $$\alpha_{\text{raw,pert}}(k) = \frac{y_{R,\text{pert}}(k) - y_{L,\text{pert}}(k
 $$\text{low\_bound\_clip\_count} > 0, \quad \text{high\_bound\_clip\_count} > 0$$
 $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k \in [P_{\min}, P_{\max}]$$
 
-#### 4.4 标称对称虚假补偿双域评测与死区机制 (Test C8)
-拆分为两个子测试：
-- **C8A (`C8A_SensorCommFalseComp`)**：$r=1.00$、无偏载，考核传感器/通信噪声下的虚假补偿；
-- **C8B (`C8B_PayloadConfounding`)**：$r=1.00$、施加偏载（$\Delta m=50\text{kg}, d_{\text{load}} \in [-0.10, +0.10]\text{ m}$），考核机械偏载对对称系统的混淆。
-
-统计定义明确区分：
-- `time_exceed_mean`：试验在评测窗口内 $|\theta_k| > 1.0\times 10^{-5}$ 的时间比例均值；
-- `trial_exceed_ratio`：最终估计值 $|\hat{\Delta K}_f| > 1.0\times 10^{-5}$ 的试验比例（作为辅助诊断）。
-正式验收必须考核 `time_exceed_mean <= 5.0%`。若未达标，严禁调整阈值，如实输出 `FAIL_FALSE_COMPENSATION_TIME_RATIO`。若需要控制虚假补偿，应在控制器前馈中引入死区（$|\hat{\Delta K}_f| \le 1.0\times 10^{-5}$ 时强制保持 $\gamma_L = \gamma_R = 1.0$）。
+#### 4.4 标称对称虚假补偿双域评测与迟滞门控机制 (Test C8)
+拆分为三个子测试：
+- **C8A (`TestC8A_SensorCommFalseComp`)**：$r=1.00$、无偏载，纳入全要素扰动矩阵（增益漂移 $\pm 2\%$、时滞 $0\dots 2\text{ ms}$、传感器噪声及零偏），评估原始估计器性能。
+  输出时间游程统计：最长单次连续超标时间 P95 (`max_run_p95`)、后半程超标均比 (`late_exceed_mean`)、首次/最后超标时刻。
+  严格检验 5 项判据（含超标时间比例 `time_exceed_mean <= 5.0%`）。若未达标，严禁调整阈值或放宽指标，如实输出 `RAW_ESTIMATOR_FAIL`。
+- **C8B (`TestC8B_PayloadConfounding`)**：$r=1.00$、施加偏载（$\Delta m=50\text{kg}, d_{\text{load}} \in [-0.10, +0.10]\text{ m}$），引入匹配的 $d_{\text{load}}=0$ 对照组，计算增量偏载偏差 `theta_payload_bias`，状态定性为 `DIAGNOSTIC_PAYLOAD_CONFOUNDING`。
+- **C8C (`TestC8C_GatedApplication`)**：独立的迟滞门控应用层评测（$\theta_{\text{on}}=1.0\times 10^{-5}$，$\theta_{\text{off}}=0.7\times 10^{-5}$，确认窗口 $N_{\text{confirm}}=200\text{ ms}$），在不改动底层控制器红线的前提下评估门控对虚假执行的抑制能力，状态定性为 `GATED_APPLICATION_EVAL`。
 
 #### 4.5 三表拆分 CSV 架构规范
 坚决杜绝不同语义字段混合，拆分为三个高内聚数据表：
-1. **`step3c_performance_results.csv`**：记录 C4 偏载诊断、C5 复合工况与 C8 虚假补偿性能，包含实际统计值（禁止硬编码）；
-2. **`step3c_sensitivity_results.csv`**：记录 C6 灵敏度两套排行榜；
-3. **`step3c_projection_results.csv`**：记录 C7 凸集投影安全性与双侧截断计数。
+1. **`step3c_performance_results.csv`**（19 行 x 59 列）：记录 C4 偏载诊断（含 $R^2$ 局部特征）、C5 复合工况（多指标最劣角点并集抽样与角点信息）、C8A 原始估计器（含游程统计）、C8B 偏载混淆与 C8C 门控仿真；
+2. **`step3c_sensitivity_results.csv`**（20 行 x 13 列）：记录 C6 灵敏度两套排行榜（含单因素物理导数及带量纲物理单位、`Range_Impact`）；
+3. **`step3c_projection_results.csv`**（2 行 x 12 列）：记录 C7 凸集投影安全性与双侧截断计数。
 回读断言必须对行数、列数及关键浮点字段逐项执行内存值一致性校验（$|T_{\text{read}} - \text{mem}| < 10^{-12}$）。
 
 ---
 
 ### 5. 分阶段实施路线与准入规划 (Staged Roadmap)
 
-为确保“做一步、稳一步、证据闭环一步”，坚决不采用一揽子冒进编码，制定两阶段实施路线：
+#### 第一阶段：Step 3C-1（单因素扰动开环验证，已完成）
+1. 实现三层电流信号流、通信延时队列及高斯随机测量噪声生成器；
+2. 完成 Test C1（电流三层误差与偏置敏感度）、Test C2（CAN 通信时滞与 RK4 重积分）、Test C3（传感器随机噪声与 SVF 滤波信噪比门控）；
+3. 产出 `step3c_part1_results.csv` (58 行 x 40 列) 并通过纯文本日志无 NUL 验证。
 
-#### 第一阶段：Step 3C-1（单因素扰动开环验证）
-1. **编写非理想发生器**：
-   [`output/step3_adaptive_rls/step3c_apply_imperfections.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_apply_imperfections.m)
-   实现三层电流信号流、通信延时队列及高斯随机测量噪声生成器。
-2. **实施 Test C1**：电流三层误差与偏置敏感度（Monte Carlo $N=30$）；
-3. **实施 Test C2**：CAN 通信对称/非对称时滞（包含 $d_{\text{act}} > 0$ 时显式调用公共 [`output/common/gantry_dynamics_step_rk4.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/common/gantry_dynamics_step_rk4.m) 因果重新积分）；
-4. **实施 Test C3**：传感器高频随机噪声与 SVF 滤波信噪比门控（Monte Carlo $N=30$）。
-- **准出准则**：C1 ~ C3 运行无报错，验证 `eta_sat >= 90%` 的容错目标是否成立，生成前 3 项测试数据表与分析日志。
-
-#### 第二阶段：Step 3C-2（动力学耦合与多因素深度分析）
-在 Step 3C-1 通过审查并归档后，再启动：
-1. **实施 Test C4**：基于统一动力学积分（固定 $\Delta m = 50.0\text{ kg}$）的偏载惯性力矩诊断评估（记录串扰偏差）；
-2. **实施 Test C5**：极端复合恶劣工况评估（Monte Carlo $N=100$）；
-3. **实施 Test C6**：统一绝对敏感度龙卷风排序；
-4. **实施 Test C7**：强冲击下凸集投影安全性有限统计检验（样本级/试验级越界率）；
-5. **实施 Test C8**：标称物理对称模型的虚假补偿定量评估。
+#### 第二阶段：Step 3C-2（动力学耦合与多因素深度分析，已执行但未通过最终验收）
+1. **Test C4**：基于统一动力学积分（固定 $\Delta m = 50.0\text{ kg}$）的偏载惯性力矩诊断评估，局部拟合 $R^2 = 0.8722 < 0.95$，严格定性为“方向一致性与非线性偏载特征”，不宣称局部线性解耦；
+2. **Test C5**：多指标最劣角点并集（$\eta_{\text{total}}$ 最低、$\operatorname{RMS}(\alpha)$ 最大、$\theta$ 误差最大，取 Top 3 并集得 6 个角点）蒙特卡洛评估，如实报告 `DEGRADED`；
+3. **Test C6**：带物理量纲导数与 `Range_Impact` 排序；
+4. **Test C7**：阶跃冲击下凸集投影双侧物理边界激活（低端 25641 次，高端 20527 次截断），100% 安全通过；
+5. **Test C8**：C8A 原始估计器超标时间均比为 92.75%（门槛 5.0%），如实输出 `RAW_ESTIMATOR_FAIL`；C8B 完成偏载匹配差分；C8C 验证迟滞门控。
+- **阶段状态结论**：**Step 3 保持 OPEN，不人为放宽门槛，不提前宣告关闭 Step 3。**
 
