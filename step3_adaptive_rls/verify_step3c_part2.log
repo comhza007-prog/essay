@@ -154,10 +154,10 @@
     - 首次超标时刻中位数        : 0.502 s
     - 最后超标时刻中位数        : 2.300 s
   [C8A 最差确定性差模工况检验]:
-    [Diff_Gain_+2%_-2%] theta_hat = -2.4774e-04 | gamma_dev = 2.0393% | rms_comp = 1.1338e-01 Nm
-    [Diff_Gain_-2%_+2%] theta_hat = +2.4808e-04 | gamma_dev = 2.0422% | rms_comp = 1.1357e-01 Nm
-    [Diff_Delay_1ms_2ms] theta_hat = +2.9454e-07 | gamma_dev = 0.0024% | rms_comp = 1.3477e-04 Nm
-    [Diff_Delay_2ms_1ms] theta_hat = -1.4994e-07 | gamma_dev = 0.0012% | rms_comp = 6.8609e-05 Nm
+    [Diff_Gain_+2%_-2%] theta_hat = -2.4774e-04 | gamma_dev = 2.0393% | rms_comp = 1.1338e-01 Nm | 判定: [FAIL]
+    [Diff_Gain_-2%_+2%] theta_hat = +2.4808e-04 | gamma_dev = 2.0422% | rms_comp = 1.1357e-01 Nm | 判定: [FAIL]
+    [Diff_Delay_1ms_2ms] theta_hat = +2.9454e-07 | gamma_dev = 0.0024% | rms_comp = 1.3477e-04 Nm | 判定: [PASS]
+    [Diff_Delay_2ms_1ms] theta_hat = -1.4994e-07 | gamma_dev = 0.0012% | rms_comp = 6.8609e-05 Nm | 判定: [PASS]
   [C8A 综合评测判定]: [RAW_ESTIMATOR_FAIL] (未达标，如实记录，坚决不调高门槛)
 
 --- [C8B] 偏载对对称系统的混淆诊断 (TestC8B_PayloadConfounding, N = 100) ---
@@ -170,27 +170,30 @@
 
 --- [C8C] 独立迟滞门限控制仿真评测 (TestC8C_GatedApplication, N = 100) ---
   [C8C 门控评测结果]:
-    - 门控后虚假补偿激活时间比例均值: 88.68% (对比 C8A 原始估计超标 92.75%)
+    - 门控后虚假补偿执行激活时间比例均值: 88.69% (对比 C8A 原始估计超标 92.75%)
     - 门控后最大前馈偏离度 max|gamma-1|: 2.7110% (对比 C8A 原始 1.7599%)
     - 门控后虚假诱导偏航力矩最大 RMS : 9.6796e-02 Nm (对比 C8A 原始 9.7976e-02 Nm)
-  [C8C 综合评测状态]: [GATED_APPLICATION_EVAL]
+    - 门控后物理偏航角 RMS (RK4 重积分): 1.5820e-04 rad (对比基线 1.5712e-04 rad, 改善度: -0.69%)
+  [C8C 综合评测状态]: [GATED_APPLICATION_EVAL_ONLY] (仅作应用层门控开环评估，未解决根本估计失效)
 
 =========================================================================
->>> 正在导出 Step 3C-2 评测数据表 (三表独立架构)...
-    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能)
-    表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜)
-    表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断)
+>>> 正在导出 Step 3C-2 评测数据表 (四表独立架构)...
+    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x61)
+    表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜, 20x13)
+    表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断, 2x12)
+    表 4: step3c_c8a_deterministic_results.csv (C8A 4 种最劣差模工况, 4x9)
 =========================================================================
-    [OK] 表 1 导出成功 (19 行 x 59 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_performance_results.csv
+    [OK] 表 1 导出成功 (19 行 x 61 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_performance_results.csv
     [OK] 表 2 导出成功 (20 行 x 13 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_sensitivity_results.csv
     [OK] 表 3 导出成功 (2 行 x 12 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_projection_results.csv
+    [OK] 表 4 导出成功 (4 行 x 9 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_c8a_deterministic_results.csv
 
 >>> 正在执行 CSV 物理结构与字段对齐回读检验 (readtable 逐项数值绝对相等断言)...
-    [OK] 三表回读行列数、字段语义与关键数值逐项绝对相等断言全部成立!
+    [OK] 四表回读行列数、字段语义与关键数值逐项绝对相等断言全部成立!
 
 =========================================================================
    STEP 3C-2 测试执行与数据归档完成!                                     
    C8A 原始估计器状态: [RAW_ESTIMATOR_FAIL], 超标时间比例均值 = 92.75%                  
-   C8C 门控仿真状态  : [GATED_APPLICATION_EVAL], 门控后激活时间比例均值 = 88.68%            
+   C8C 门控仿真状态  : [GATED_APPLICATION_EVAL_ONLY], 门控后激活时间比例均值 = 88.69%            
    结论严格定性为: Step 3C-2 已执行但未通过最终技术验收                  
 =========================================================================

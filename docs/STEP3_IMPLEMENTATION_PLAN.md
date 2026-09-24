@@ -446,19 +446,23 @@ $$\alpha_{\text{raw,pert}}(k) = \frac{y_{R,\text{pert}}(k) - y_{L,\text{pert}}(k
 $$\text{low\_bound\_clip\_count} > 0, \quad \text{high\_bound\_clip\_count} > 0$$
 $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k \in [P_{\min}, P_{\max}]$$
 
-#### 4.4 标称对称虚假补偿双域评测与迟滞门控机制 (Test C8)
+#### 4.4 标称对称虚假补偿多域评测与迟滞门控机制 (Test C8)
 拆分为三个子测试：
 - **C8A (`TestC8A_SensorCommFalseComp`)**：$r=1.00$、无偏载，纳入全要素扰动矩阵（增益漂移 $\pm 2\%$、时滞 $0\dots 2\text{ ms}$、传感器噪声及零偏），评估原始估计器性能。
   输出时间游程统计：最长单次连续超标时间 P95 (`max_run_p95`)、后半程超标均比 (`late_exceed_mean`)、首次/最后超标时刻。
-  严格检验 5 项判据（含超标时间比例 `time_exceed_mean <= 5.0%`）。若未达标，严禁调整阈值或放宽指标，如实输出 `RAW_ESTIMATOR_FAIL`。
-- **C8B (`TestC8B_PayloadConfounding`)**：$r=1.00$、施加偏载（$\Delta m=50\text{kg}, d_{\text{load}} \in [-0.10, +0.10]\text{ m}$），引入匹配的 $d_{\text{load}}=0$ 对照组，计算增量偏载偏差 `theta_payload_bias`，状态定性为 `DIAGNOSTIC_PAYLOAD_CONFOUNDING`。
-- **C8C (`TestC8C_GatedApplication`)**：独立的迟滞门控应用层评测（$\theta_{\text{on}}=1.0\times 10^{-5}$，$\theta_{\text{off}}=0.7\times 10^{-5}$，确认窗口 $N_{\text{confirm}}=200\text{ ms}$），在不改动底层控制器红线的前提下评估门控对虚假执行的抑制能力，状态定性为 `GATED_APPLICATION_EVAL`。
+  严格执行 5 项程序化判据检验（含超标时间比例 `time_exceed_mean <= 5.0%`）。未达标时如实输出 `RAW_ESTIMATOR_FAIL`。
+  独立导出 4 种最差确定性差模工况检验数据至独立 CSV 表。
+- **C8B (`TestC8B_PayloadConfounding`)**：$r=1.00$、施加偏载（$\Delta m=50\text{kg}, d_{\text{load}} \in [-0.10, +0.10]\text{ m}$），引入匹配的 $d_{\text{load}}=0$ 对照组，计算增量偏载偏差均值 `theta_payload_bias` 与 P95 统计值 `theta_payload_bias_p95_abs`，状态定性为 `DIAGNOSTIC_PAYLOAD_CONFOUNDING`。
+- **C8C (`TestC8C_GatedApplication`)**：独立的迟滞门控开环应用层评测（$\theta_{\text{on}}=1.0\times 10^{-5}$，$\theta_{\text{off}}=0.7\times 10^{-5}$，确认窗口 $N_{\text{confirm}}=200\text{ ms}$）。
+  在不改动底层控制器红线的前提下，完成时序修正（执行器延迟后状态统计）与**真实 RK4 动力学重积分**。
+  **结论收紧声明**：由于持续差模增益漂移未被根本消除，门控后执行激活时间仍达 $88.69\%$，最大增益偏离（$2.711\%$）甚至高于 C8A 原始值（$1.760\%$），RK4 重积分所得物理偏航角改善度为 $-0.69\%$（因门控阶跃突变带来微小扰动），因此**绝不能据此宣称物理偏角动态改善或虚假补偿已解决**，状态严格定性为 `GATED_APPLICATION_EVAL_ONLY`。
 
-#### 4.5 三表拆分 CSV 架构规范
-坚决杜绝不同语义字段混合，拆分为三个高内聚数据表：
-1. **`step3c_performance_results.csv`**（19 行 x 59 列）：记录 C4 偏载诊断（含 $R^2$ 局部特征）、C5 复合工况（多指标最劣角点并集抽样与角点信息）、C8A 原始估计器（含游程统计）、C8B 偏载混淆与 C8C 门控仿真；
+#### 4.5 四表独立 CSV 架构规范
+坚决杜绝不同语义字段混合，拆分为四个高内聚独立数据表：
+1. **`step3c_performance_results.csv`**（19 行 x 61 列）：记录 C4 偏载诊断（含 $R^2$ 局部特征）、C5 复合工况（多指标最劣角点并集抽样与角点信息）、C8A 原始估计器（含游程统计）、C8B 偏载混淆（含 P95 偏载偏差）与 C8C 门控仿真（含真实动态角及改善度）；显式声明应用模式（`POSTHOC_STATIC_REPLAY` / `CAUSAL_GATED_REPLAY`），严禁使用硬编码零伪装计算值；
 2. **`step3c_sensitivity_results.csv`**（20 行 x 13 列）：记录 C6 灵敏度两套排行榜（含单因素物理导数及带量纲物理单位、`Range_Impact`）；
-3. **`step3c_projection_results.csv`**（2 行 x 12 列）：记录 C7 凸集投影安全性与双侧截断计数。
+3. **`step3c_projection_results.csv`**（2 行 x 12 列）：记录 C7 凸集投影安全性与双侧截断计数；
+4. **`step3c_c8a_deterministic_results.csv`**（4 行 x 9 列）：记录 C8A 4 种最劣确定性差模工况的参数估计、增益偏离与虚假力矩残差。
 回读断言必须对行数、列数及关键浮点字段逐项执行内存值一致性校验（$|T_{\text{read}} - \text{mem}| < 10^{-12}$）。
 
 ---
@@ -475,6 +479,6 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
 2. **Test C5**：多指标最劣角点并集（$\eta_{\text{total}}$ 最低、$\operatorname{RMS}(\alpha)$ 最大、$\theta$ 误差最大，取 Top 3 并集得 6 个角点）蒙特卡洛评估，如实报告 `DEGRADED`；
 3. **Test C6**：带物理量纲导数与 `Range_Impact` 排序；
 4. **Test C7**：阶跃冲击下凸集投影双侧物理边界激活（低端 25641 次，高端 20527 次截断），100% 安全通过；
-5. **Test C8**：C8A 原始估计器超标时间均比为 92.75%（门槛 5.0%），如实输出 `RAW_ESTIMATOR_FAIL`；C8B 完成偏载匹配差分；C8C 验证迟滞门控。
-- **阶段状态结论**：**Step 3 保持 OPEN，不人为放宽门槛，不提前宣告关闭 Step 3。**
+5. **Test C8**：C8A 原始估计器超标时间均比为 92.75%（门槛 5.0%），程序化输出 `RAW_ESTIMATOR_FAIL`；C8B 完成偏载匹配差分与 P95 统计；C8C 完成真实 RK4 动力学重积分，定性为 `GATED_APPLICATION_EVAL_ONLY`；导出确定性差模表。
+- **阶段状态结论**：**只有 C8A 原始估计器通过 5% 超标时间门槛且 C8C 物理动态指标完善后才可讨论关闭。当前 Step 3 严格保持 OPEN。**
 

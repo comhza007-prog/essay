@@ -146,10 +146,10 @@ function verify_step3c_part2()
             
             perf_rows(end+1, :) = { ...
                 d_tag, item_name, 'Nominal_Hardware_Limit', Imax_nominal, ...
-                'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'Eccentric_Load', dist_desc, ...
+                'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'POSTHOC_STATIC_REPLAY', 'Eccentric_Load', dist_desc, ...
                 'Deterministic', 'Single', ds.Delta_Kf_true, ...
                 res_c4.theta_hat, res_c4.theta_hat, err_c4, err_c4, ...
-                theta_payload_bias, ...
+                theta_payload_bias, NaN, ...
                 res_c4.Kf_L_hat, res_c4.Kf_R_hat, res_c4.gamma_L, res_c4.gamma_R, gamma_dev_c4, res_c4.calib_validity_str, ...
                 0, res_c4.eta_kf_residual, res_c4.eta_total, res_c4.eta_total, ...
                 res_c4.rms_base, res_c4.rms_comp, res_c4.rms_total_base, res_c4.rms_total_comp, ...
@@ -271,13 +271,35 @@ function verify_step3c_part2()
         
         % 阶段二: 在选取的 Top 角点上叠加噪声执行 Monte Carlo N = 100
         fprintf('  [阶段二] 在 %d 个最劣角点并集上叠加噪声执行 Monte Carlo N = %d...\n', N_selected, N_mc_c5);
-        theta_hat_arr   = zeros(N_mc_c5, 1);
-        eta_sat_arr     = zeros(N_mc_c5, 1);
-        eta_tot_arr     = zeros(N_mc_c5, 1);
-        rms_alpha_arr   = zeros(N_mc_c5, 1);
-        unproj_peak_arr = zeros(N_mc_c5, 1);
-        clip_count_arr  = zeros(N_mc_c5, 1);
-        calib_valid_arr = true(N_mc_c5, 1);
+        theta_hat_arr      = zeros(N_mc_c5, 1);
+        eta_sat_arr        = zeros(N_mc_c5, 1);
+        eta_tot_arr        = zeros(N_mc_c5, 1);
+        rms_alpha_base_arr = zeros(N_mc_c5, 1);
+        rms_alpha_arr      = zeros(N_mc_c5, 1);
+        eta_alpha_abs_arr  = zeros(N_mc_c5, 1);
+        eta_alpha_del_arr  = zeros(N_mc_c5, 1);
+        rms_base_arr       = zeros(N_mc_c5, 1);
+        rms_comp_arr       = zeros(N_mc_c5, 1);
+        rms_tot_b_arr      = zeros(N_mc_c5, 1);
+        rms_tot_c_arr      = zeros(N_mc_c5, 1);
+        rms_dalpha_b_arr   = zeros(N_mc_c5, 1);
+        rms_dalpha_c_arr   = zeros(N_mc_c5, 1);
+        alpha_ss_b_arr     = zeros(N_mc_c5, 1);
+        alpha_ss_c_arr     = zeros(N_mc_c5, 1);
+        base_sat_arr       = zeros(N_mc_c5, 1);
+        comp_sat_arr       = zeros(N_mc_c5, 1);
+        pe_act_arr         = zeros(N_mc_c5, 1);
+        pe_far_arr         = zeros(N_mc_c5, 1);
+        svf_att_arr        = zeros(N_mc_c5, 1);
+        Kf_L_hat_arr       = zeros(N_mc_c5, 1);
+        Kf_R_hat_arr       = zeros(N_mc_c5, 1);
+        gamma_L_arr        = zeros(N_mc_c5, 1);
+        gamma_R_arr        = zeros(N_mc_c5, 1);
+        gamma_dev_arr      = zeros(N_mc_c5, 1);
+        unproj_peak_arr    = zeros(N_mc_c5, 1);
+        clip_count_arr     = zeros(N_mc_c5, 1);
+        calib_valid_arr    = true(N_mc_c5, 1);
+        exceed_rt_arr      = zeros(N_mc_c5, 1);
         
         for j = 1:N_mc_c5
             seed_j = 20260924 + j;
@@ -304,13 +326,35 @@ function verify_step3c_part2()
             
             res_j = analyze_step3c_trial(ds, cfg_j);
             
-            theta_hat_arr(j)   = res_j.theta_hat;
-            eta_sat_arr(j)     = res_j.eta_sat;
-            eta_tot_arr(j)     = res_j.eta_total;
-            rms_alpha_arr(j)   = res_j.rms_alpha_comp_dyn;
-            unproj_peak_arr(j) = res_j.unproj_max_peak;
-            clip_count_arr(j)  = res_j.unproj_clipped_count;
-            calib_valid_arr(j) = res_j.is_calib_valid;
+            theta_hat_arr(j)      = res_j.theta_hat;
+            eta_sat_arr(j)        = res_j.eta_sat;
+            eta_tot_arr(j)        = res_j.eta_total;
+            rms_alpha_base_arr(j) = res_j.rms_alpha_base_dyn;
+            rms_alpha_arr(j)      = res_j.rms_alpha_comp_dyn;
+            eta_alpha_abs_arr(j)  = res_j.eta_alpha_abs;
+            eta_alpha_del_arr(j)  = res_j.eta_alpha_delay;
+            rms_base_arr(j)       = res_j.rms_base;
+            rms_comp_arr(j)       = res_j.rms_comp;
+            rms_tot_b_arr(j)      = res_j.rms_total_base;
+            rms_tot_c_arr(j)      = res_j.rms_total_comp;
+            rms_dalpha_b_arr(j)   = res_j.rms_dalpha_base;
+            rms_dalpha_c_arr(j)   = res_j.rms_dalpha_comp;
+            alpha_ss_b_arr(j)     = res_j.alpha_ss_base;
+            alpha_ss_c_arr(j)     = res_j.alpha_ss_comp;
+            base_sat_arr(j)       = res_j.base_sat_ratio_total;
+            comp_sat_arr(j)       = res_j.comp_sat_ratio_total;
+            pe_act_arr(j)         = res_j.pe_active_ratio;
+            pe_far_arr(j)         = res_j.pe_false_alarm_rate;
+            svf_att_arr(j)        = res_j.svf_atten_dB;
+            Kf_L_hat_arr(j)       = res_j.Kf_L_hat;
+            Kf_R_hat_arr(j)       = res_j.Kf_R_hat;
+            gamma_L_arr(j)        = res_j.gamma_L;
+            gamma_R_arr(j)        = res_j.gamma_R;
+            gamma_dev_arr(j)      = max(abs(res_j.gamma_L - 1.0), abs(res_j.gamma_R - 1.0));
+            unproj_peak_arr(j)    = res_j.unproj_max_peak;
+            clip_count_arr(j)     = res_j.unproj_clipped_count;
+            calib_valid_arr(j)    = res_j.is_calib_valid;
+            exceed_rt_arr(j)      = res_j.exceed_false_ratio;
         end
         
         eta_total_min          = min(eta_tot_arr);
@@ -335,24 +379,25 @@ function verify_step3c_part2()
             median(theta_hat_arr), p95_err, rmse_err, projection_trial_ratio);
         
         dist_desc = sprintf('TopWorstUnion_N%d_Selected%d;Noise2um_10ct', N_mc_c5, N_selected);
+        sel_metric_str = 'Union(Worst_Eta[1:3], Worst_Alpha[1:3], Worst_Theta[1:3])';
         
         perf_rows(end+1, :) = { ...
             d_tag, 'TestC5_TopWorstCorners_Noise_MC100', 'Nominal_Hardware_Limit', Imax_nominal, ...
-            'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'Top_Worst_Corners_Noise_MC', dist_desc, ...
+            'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'POSTHOC_STATIC_REPLAY', 'Top_Worst_Corners_Noise_MC', dist_desc, ...
             '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c5), ds.Delta_Kf_true, ...
             mean(theta_hat_arr), median(theta_hat_arr), p95_err, rmse_err, ...
-            NaN, ...
-            NaN, NaN, NaN, NaN, NaN, 'VALID', ...
-            invalid_calib_count, eta_kf_p05, mean(eta_tot_arr), eta_total_min, ...
-            NaN, NaN, NaN, NaN, ...
-            NaN, RMS_alpha_p95, NaN, NaN, ...
-            NaN, NaN, NaN, NaN, ...
             NaN, NaN, ...
+            mean(Kf_L_hat_arr), mean(Kf_R_hat_arr), mean(gamma_L_arr), mean(gamma_R_arr), max(gamma_dev_arr), 'VALID', ...
+            invalid_calib_count, eta_kf_p05, mean(eta_tot_arr), eta_total_min, ...
+            mean(rms_base_arr), mean(rms_comp_arr), mean(rms_tot_b_arr), mean(rms_tot_c_arr), ...
+            mean(rms_alpha_base_arr), RMS_alpha_p95, mean(eta_alpha_abs_arr), mean(eta_alpha_del_arr), ...
+            mean(rms_dalpha_b_arr), mean(rms_dalpha_c_arr), mean(alpha_ss_b_arr), mean(alpha_ss_c_arr), ...
+            mean(base_sat_arr), mean(comp_sat_arr), ...
             max(unproj_peak_arr), sum(clip_count_arr), ...
-            NaN, NaN, NaN, ...
-            NaN, NaN, NaN, projection_trial_ratio, ...
+            mean(pe_act_arr), mean(pe_far_arr), mean(svf_att_arr), ...
+            mean(rms_comp_arr), max(rms_comp_arr), mean(exceed_rt_arr), projection_trial_ratio, ...
             NaN, NaN, NaN, NaN, ...
-            'Union(Worst_Eta[1:3], Worst_Alpha[1:3], Worst_Theta[1:3])', N_selected, ...
+            sel_metric_str, N_selected, ...
             worst_eta_c_desc, worst_alpha_c_desc, worst_theta_c_desc, ...
             status_c5};
     end
@@ -625,6 +670,26 @@ function verify_step3c_part2()
     c8a_calib_val    = true(N_mc_c8, 1);
     c8a_alpha_base   = zeros(N_mc_c8, 1);
     c8a_alpha_comp   = zeros(N_mc_c8, 1);
+    c8a_KfL_hat      = zeros(N_mc_c8, 1);
+    c8a_KfR_hat      = zeros(N_mc_c8, 1);
+    c8a_rms_base     = zeros(N_mc_c8, 1);
+    c8a_rms_tot_b    = zeros(N_mc_c8, 1);
+    c8a_rms_tot_c    = zeros(N_mc_c8, 1);
+    c8a_eta_kf_res   = zeros(N_mc_c8, 1);
+    c8a_eta_total    = zeros(N_mc_c8, 1);
+    c8a_eta_alpha_abs= zeros(N_mc_c8, 1);
+    c8a_eta_alpha_del= zeros(N_mc_c8, 1);
+    c8a_rms_dalpha_b = zeros(N_mc_c8, 1);
+    c8a_rms_dalpha_c = zeros(N_mc_c8, 1);
+    c8a_alpha_ss_b   = zeros(N_mc_c8, 1);
+    c8a_alpha_ss_c   = zeros(N_mc_c8, 1);
+    c8a_base_sat     = zeros(N_mc_c8, 1);
+    c8a_comp_sat     = zeros(N_mc_c8, 1);
+    c8a_peak         = zeros(N_mc_c8, 1);
+    c8a_proj_cnt     = zeros(N_mc_c8, 1);
+    c8a_pe_act       = zeros(N_mc_c8, 1);
+    c8a_pe_far       = zeros(N_mc_c8, 1);
+    c8a_svf_att      = zeros(N_mc_c8, 1);
     
     max_run_arr      = zeros(N_mc_c8, 1);
     late_exceed_arr  = zeros(N_mc_c8, 1);
@@ -658,15 +723,35 @@ function verify_step3c_part2()
         c8a_cfgs{j} = cfg_c8a;
         c8a_res_store{j} = res_j;
         
-        c8a_theta_hat(j)  = res_j.theta_hat;
-        c8a_gamma_L(j)    = res_j.gamma_L;
-        c8a_gamma_R(j)    = res_j.gamma_R;
-        c8a_gamma_dev(j)  = max(abs(res_j.gamma_L - 1.0), abs(res_j.gamma_R - 1.0));
-        c8a_rms_comp(j)   = res_j.rms_comp;
-        c8a_exceed_rt(j)  = res_j.exceed_false_ratio;
-        c8a_calib_val(j)  = res_j.is_calib_valid;
-        c8a_alpha_base(j) = res_j.rms_alpha_base_dyn;
-        c8a_alpha_comp(j) = res_j.rms_alpha_comp_dyn;
+        c8a_theta_hat(j)     = res_j.theta_hat;
+        c8a_gamma_L(j)       = res_j.gamma_L;
+        c8a_gamma_R(j)       = res_j.gamma_R;
+        c8a_gamma_dev(j)     = max(abs(res_j.gamma_L - 1.0), abs(res_j.gamma_R - 1.0));
+        c8a_rms_comp(j)      = res_j.rms_comp;
+        c8a_exceed_rt(j)     = res_j.exceed_false_ratio;
+        c8a_calib_val(j)     = res_j.is_calib_valid;
+        c8a_alpha_base(j)    = res_j.rms_alpha_base_dyn;
+        c8a_alpha_comp(j)    = res_j.rms_alpha_comp_dyn;
+        c8a_KfL_hat(j)       = res_j.Kf_L_hat;
+        c8a_KfR_hat(j)       = res_j.Kf_R_hat;
+        c8a_rms_base(j)      = res_j.rms_base;
+        c8a_rms_tot_b(j)     = res_j.rms_total_base;
+        c8a_rms_tot_c(j)     = res_j.rms_total_comp;
+        c8a_eta_kf_res(j)    = res_j.eta_kf_residual;
+        c8a_eta_total(j)     = res_j.eta_total;
+        c8a_eta_alpha_abs(j) = res_j.eta_alpha_abs;
+        c8a_eta_alpha_del(j) = res_j.eta_alpha_delay;
+        c8a_rms_dalpha_b(j)  = res_j.rms_dalpha_base;
+        c8a_rms_dalpha_c(j)  = res_j.rms_dalpha_comp;
+        c8a_alpha_ss_b(j)    = res_j.alpha_ss_base;
+        c8a_alpha_ss_c(j)    = res_j.alpha_ss_comp;
+        c8a_base_sat(j)      = res_j.base_sat_ratio_total;
+        c8a_comp_sat(j)      = res_j.comp_sat_ratio_total;
+        c8a_peak(j)          = res_j.unproj_max_peak;
+        c8a_proj_cnt(j)      = res_j.unproj_clipped_count;
+        c8a_pe_act(j)        = res_j.pe_active_ratio;
+        c8a_pe_far(j)        = res_j.pe_false_alarm_rate;
+        c8a_svf_att(j)       = res_j.svf_atten_dB;
         
         % 时间分布统计证据
         t_eval = res_j.t(res_j.mask_eval);
@@ -720,35 +805,63 @@ function verify_step3c_part2()
     % 评估 4 种最劣差模确定性工况
     fprintf('  [C8A 最差确定性差模工况检验]:\n');
     det_diff_cfgs = { ...
-        'Diff_Gain_+2%_-2%', struct('delta_g_L', +0.02, 'delta_g_R', -0.02); ...
-        'Diff_Gain_-2%_+2%', struct('delta_g_L', -0.02, 'delta_g_R', +0.02); ...
-        'Diff_Delay_1ms_2ms', struct('d_act_L', 1, 'd_act_R', 2); ...
-        'Diff_Delay_2ms_1ms', struct('d_act_L', 2, 'd_act_R', 1)};
+        'Diff_Gain_+2%_-2%', struct('delta_g_L', +0.02, 'delta_g_R', -0.02, 'd_act_L', 0, 'd_act_R', 0); ...
+        'Diff_Gain_-2%_+2%', struct('delta_g_L', -0.02, 'delta_g_R', +0.02, 'd_act_L', 0, 'd_act_R', 0); ...
+        'Diff_Delay_1ms_2ms', struct('delta_g_L', 0.0, 'delta_g_R', 0.0, 'd_act_L', 1, 'd_act_R', 2); ...
+        'Diff_Delay_2ms_1ms', struct('delta_g_L', 0.0, 'delta_g_R', 0.0, 'd_act_L', 2, 'd_act_R', 1)};
+    det_rows = cell(size(det_diff_cfgs, 1), 9);
     for di = 1:size(det_diff_cfgs, 1)
-        res_det = analyze_step3c_trial(d_sym, det_diff_cfgs{di, 2});
-        fprintf('    [%s] theta_hat = %+.4e | gamma_dev = %.4f%% | rms_comp = %.4e Nm\n', ...
-            det_diff_cfgs{di, 1}, res_det.theta_hat, ...
-            max(abs(res_det.gamma_L - 1), abs(res_det.gamma_R - 1))*100, res_det.rms_comp);
+        cfg_di = det_diff_cfgs{di, 2};
+        res_det = analyze_step3c_trial(d_sym, cfg_di);
+        gamma_dev_det = max(abs(res_det.gamma_L - 1.0), abs(res_det.gamma_R - 1.0));
+        if abs(res_det.theta_hat) <= 1.0e-5 && gamma_dev_det <= 0.005 && res_det.rms_comp <= 0.01
+            det_status = 'PASS';
+        else
+            det_status = 'FAIL';
+        end
+        det_rows(di, :) = { ...
+            det_diff_cfgs{di, 1}, ...
+            res_det.theta_hat, ...
+            gamma_dev_det, ...
+            res_det.rms_comp, ...
+            cfg_di.d_act_L, ...
+            cfg_di.d_act_R, ...
+            cfg_di.delta_g_L, ...
+            cfg_di.delta_g_R, ...
+            det_status};
+        fprintf('    [%s] theta_hat = %+.4e | gamma_dev = %.4f%% | rms_comp = %.4e Nm | 判定: [%s]\n', ...
+            det_diff_cfgs{di, 1}, res_det.theta_hat, gamma_dev_det * 100, res_det.rms_comp, det_status);
     end
     
-    status_c8a = 'RAW_ESTIMATOR_FAIL';
+    % 程序化判定 C8A 五项判据
+    pass_p95   = p95_theta_a <= 1.0e-5;
+    pass_med   = median_theta_a <= 5.0e-6;
+    pass_gamma = max_gamma_dev_a <= 0.005;
+    pass_rms   = max_rms_comp_a <= 0.01;
+    pass_time  = time_exceed_mean_a <= 5.0;
+    
+    if pass_p95 && pass_med && pass_gamma && pass_rms && pass_time
+        status_c8a = 'PASS';
+    else
+        status_c8a = 'RAW_ESTIMATOR_FAIL';
+    end
     fprintf('  [C8A 综合评测判定]: [%s] (未达标，如实记录，坚决不调高门槛)\n', status_c8a);
     
     perf_rows(end+1, :) = { ...
         'r100 (Delta_Kf = 0)', 'TestC8A_SensorCommFalseComp', 'Nominal_Hardware_Limit', Imax_nominal, ...
-        'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'Sensor_Comm_Noise_Symmetric', ...
+        'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'POSTHOC_STATIC_REPLAY', 'Sensor_Comm_Noise_Symmetric', ...
         sprintf('Noise2um_Bias15ct_Gain2pct_Delay2ms_N%d', N_mc_c8), ...
         '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c8), 0.0, ...
         mean(c8a_theta_hat), median_theta_a, p95_theta_a, sqrt(mean(c8a_abs_theta.^2)), ...
-        NaN, ... % C8A 无偏载，严格写 NaN
-        NaN, NaN, mean(c8a_gamma_L), mean(c8a_gamma_R), max_gamma_dev_a, 'VALID', ...
-        sum(~c8a_calib_val), NaN, NaN, NaN, ...
-        0.0, mean_rms_comp_a, NaN, NaN, ...
-        mean(c8a_alpha_base), mean(c8a_alpha_comp), NaN, NaN, ...
-        NaN, NaN, NaN, NaN, ...
-        0.0, 0.0, ...
-        0.0, 0, ...
-        NaN, NaN, NaN, ...
+        NaN, NaN, ...
+        mean(c8a_KfL_hat), mean(c8a_KfR_hat), mean(c8a_gamma_L), mean(c8a_gamma_R), max_gamma_dev_a, 'VALID', ...
+        sum(~c8a_calib_val), mean(c8a_eta_kf_res), mean(c8a_eta_total), min(c8a_eta_total), ...
+        mean(c8a_rms_base), mean(c8a_rms_comp), mean(c8a_rms_tot_b), mean(c8a_rms_tot_c), ...
+        mean(c8a_alpha_base), mean(c8a_alpha_comp), mean(c8a_eta_alpha_abs), mean(c8a_eta_alpha_del), ...
+        mean(c8a_rms_dalpha_b), mean(c8a_rms_dalpha_c), mean(c8a_alpha_ss_b), mean(c8a_alpha_ss_c), ...
+        mean(c8a_base_sat), mean(c8a_comp_sat), ...
+        max(c8a_peak), sum(c8a_proj_cnt), ...
+        mean(c8a_pe_act), mean(c8a_pe_far), mean(c8a_svf_att), ...
         mean_rms_comp_a, max_rms_comp_a, time_exceed_mean_a, trial_exceed_rt_a, ...
         max_run_p95, late_exceed_mean, first_exceed_median, last_exceed_median, ...
         'N/A', NaN, 'N/A', 'N/A', 'N/A', ...
@@ -768,6 +881,26 @@ function verify_step3c_part2()
     c8b_alpha_base   = zeros(N_mc_c8, 1);
     c8b_alpha_comp   = zeros(N_mc_c8, 1);
     c8b_payload_bias = zeros(N_mc_c8, 1);
+    c8b_KfL_hat      = zeros(N_mc_c8, 1);
+    c8b_KfR_hat      = zeros(N_mc_c8, 1);
+    c8b_rms_base     = zeros(N_mc_c8, 1);
+    c8b_rms_tot_b    = zeros(N_mc_c8, 1);
+    c8b_rms_tot_c    = zeros(N_mc_c8, 1);
+    c8b_eta_kf_res   = zeros(N_mc_c8, 1);
+    c8b_eta_total    = zeros(N_mc_c8, 1);
+    c8b_eta_alpha_abs= zeros(N_mc_c8, 1);
+    c8b_eta_alpha_del= zeros(N_mc_c8, 1);
+    c8b_rms_dalpha_b = zeros(N_mc_c8, 1);
+    c8b_rms_dalpha_c = zeros(N_mc_c8, 1);
+    c8b_alpha_ss_b   = zeros(N_mc_c8, 1);
+    c8b_alpha_ss_c   = zeros(N_mc_c8, 1);
+    c8b_base_sat     = zeros(N_mc_c8, 1);
+    c8b_comp_sat     = zeros(N_mc_c8, 1);
+    c8b_peak         = zeros(N_mc_c8, 1);
+    c8b_proj_cnt     = zeros(N_mc_c8, 1);
+    c8b_pe_act       = zeros(N_mc_c8, 1);
+    c8b_pe_far       = zeros(N_mc_c8, 1);
+    c8b_svf_att      = zeros(N_mc_c8, 1);
     
     for j = 1:N_mc_c8
         seed_j = 20260924 + j;
@@ -791,15 +924,35 @@ function verify_step3c_part2()
         
         c8b_payload_bias(j) = res_j.theta_hat - res_ref.theta_hat;
         
-        c8b_theta_hat(j)  = res_j.theta_hat;
-        c8b_gamma_L(j)    = res_j.gamma_L;
-        c8b_gamma_R(j)    = res_j.gamma_R;
-        c8b_gamma_dev(j)  = max(abs(res_j.gamma_L - 1.0), abs(res_j.gamma_R - 1.0));
-        c8b_rms_comp(j)   = res_j.rms_comp;
-        c8b_exceed_rt(j)  = res_j.exceed_false_ratio;
-        c8b_calib_val(j)  = res_j.is_calib_valid;
-        c8b_alpha_base(j) = res_j.rms_alpha_base_dyn;
-        c8b_alpha_comp(j) = res_j.rms_alpha_comp_dyn;
+        c8b_theta_hat(j)     = res_j.theta_hat;
+        c8b_gamma_L(j)       = res_j.gamma_L;
+        c8b_gamma_R(j)       = res_j.gamma_R;
+        c8b_gamma_dev(j)     = max(abs(res_j.gamma_L - 1.0), abs(res_j.gamma_R - 1.0));
+        c8b_rms_comp(j)      = res_j.rms_comp;
+        c8b_exceed_rt(j)     = res_j.exceed_false_ratio;
+        c8b_calib_val(j)     = res_j.is_calib_valid;
+        c8b_alpha_base(j)    = res_j.rms_alpha_base_dyn;
+        c8b_alpha_comp(j)    = res_j.rms_alpha_comp_dyn;
+        c8b_KfL_hat(j)       = res_j.Kf_L_hat;
+        c8b_KfR_hat(j)       = res_j.Kf_R_hat;
+        c8b_rms_base(j)      = res_j.rms_base;
+        c8b_rms_tot_b(j)     = res_j.rms_total_base;
+        c8b_rms_tot_c(j)     = res_j.rms_total_comp;
+        c8b_eta_kf_res(j)    = res_j.eta_kf_residual;
+        c8b_eta_total(j)     = res_j.eta_total;
+        c8b_eta_alpha_abs(j) = res_j.eta_alpha_abs;
+        c8b_eta_alpha_del(j) = res_j.eta_alpha_delay;
+        c8b_rms_dalpha_b(j)  = res_j.rms_dalpha_base;
+        c8b_rms_dalpha_c(j)  = res_j.rms_dalpha_comp;
+        c8b_alpha_ss_b(j)    = res_j.alpha_ss_base;
+        c8b_alpha_ss_c(j)    = res_j.alpha_ss_comp;
+        c8b_base_sat(j)      = res_j.base_sat_ratio_total;
+        c8b_comp_sat(j)      = res_j.comp_sat_ratio_total;
+        c8b_peak(j)          = res_j.unproj_max_peak;
+        c8b_proj_cnt(j)      = res_j.unproj_clipped_count;
+        c8b_pe_act(j)        = res_j.pe_active_ratio;
+        c8b_pe_far(j)        = res_j.pe_false_alarm_rate;
+        c8b_svf_att(j)       = res_j.svf_atten_dB;
     end
     
     c8b_abs_theta      = abs(c8b_theta_hat);
@@ -824,35 +977,37 @@ function verify_step3c_part2()
     
     perf_rows(end+1, :) = { ...
         'r100 (Delta_Kf = 0)', 'TestC8B_PayloadConfounding', 'Nominal_Hardware_Limit', Imax_nominal, ...
-        'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'Payload_Confounding_Symmetric', ...
+        'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'POSTHOC_STATIC_REPLAY', 'Payload_Confounding_Symmetric', ...
         sprintf('Delta_m=50kg;d_load=[-0.1,0.1]m;N%d', N_mc_c8), ...
         '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c8), 0.0, ...
         mean(c8b_theta_hat), median_theta_b, p95_theta_b, sqrt(mean(c8b_abs_theta.^2)), ...
-        mean_payload_bias_b, ... % 写入与 d_load=0 对照的增量偏差均值
-        NaN, NaN, mean(c8b_gamma_L), mean(c8b_gamma_R), max_gamma_dev_b, 'VALID', ...
-        sum(~c8b_calib_val), NaN, NaN, NaN, ...
-        0.0, mean_rms_comp_b, NaN, NaN, ...
-        mean(c8b_alpha_base), mean(c8b_alpha_comp), NaN, NaN, ...
-        NaN, NaN, NaN, NaN, ...
-        0.0, 0.0, ...
-        0.0, 0, ...
-        NaN, NaN, NaN, ...
+        mean_payload_bias_b, p95_payload_bias_b, ...
+        mean(c8b_KfL_hat), mean(c8b_KfR_hat), mean(c8b_gamma_L), mean(c8b_gamma_R), max_gamma_dev_b, 'VALID', ...
+        sum(~c8b_calib_val), mean(c8b_eta_kf_res), mean(c8b_eta_total), min(c8b_eta_total), ...
+        mean(c8b_rms_base), mean(c8b_rms_comp), mean(c8b_rms_tot_b), mean(c8b_rms_tot_c), ...
+        mean(c8b_alpha_base), mean(c8b_alpha_comp), mean(c8b_eta_alpha_abs), mean(c8b_eta_alpha_del), ...
+        mean(c8b_rms_dalpha_b), mean(c8b_rms_dalpha_c), mean(c8b_alpha_ss_b), mean(c8b_alpha_ss_c), ...
+        mean(c8b_base_sat), mean(c8b_comp_sat), ...
+        max(c8b_peak), sum(c8b_proj_cnt), ...
+        mean(c8b_pe_act), mean(c8b_pe_far), mean(c8b_svf_att), ...
         mean_rms_comp_b, max_rms_comp_b, time_exceed_mean_b, trial_exceed_rt_b, ...
         NaN, NaN, NaN, NaN, ...
         'N/A', NaN, 'N/A', 'N/A', 'N/A', ...
         status_c8b};
     
     % -------------------------------------------------------------------------
-    % 8.3 子测试 C8C: 独立迟滞门限控制仿真验证 (GATED_APPLICATION_EVAL)
+    % 8.3 子测试 C8C: 独立迟滞门限控制仿真评测 (GATED_APPLICATION_EVAL_ONLY)
     % -------------------------------------------------------------------------
     fprintf('\n--- [C8C] 独立迟滞门限控制仿真评测 (TestC8C_GatedApplication, N = %d) ---\n', N_mc_c8);
     theta_on  = 1.0e-5;
     theta_off = 0.7e-5;
     N_confirm = round(0.20 / d_sym.dt); % 200 ms 确认窗口
     
-    c8c_rms_comp      = zeros(N_mc_c8, 1);
-    c8c_gamma_dev     = zeros(N_mc_c8, 1);
-    c8c_active_ratio  = zeros(N_mc_c8, 1);
+    c8c_rms_comp       = zeros(N_mc_c8, 1);
+    c8c_gamma_dev      = zeros(N_mc_c8, 1);
+    c8c_active_ratio   = zeros(N_mc_c8, 1);
+    c8c_rms_alpha_gate = zeros(N_mc_c8, 1);
+    c8c_eta_alpha_gate = zeros(N_mc_c8, 1);
     
     for j = 1:N_mc_c8
         res_raw = c8a_res_store{j};
@@ -892,7 +1047,7 @@ function verify_step3c_part2()
             end
         end
         
-        % 延迟与限幅
+        % 时序逻辑说明：控制器在 k 时刻生成的门控增益随指令包一起经 CAN 网络延迟执行
         dL_act = c8a_cfgs{j}.d_act_L;
         dR_act = c8a_cfgs{j}.d_act_R;
         iL_cmd = d_sym.iL_cmd;
@@ -917,38 +1072,71 @@ function verify_step3c_part2()
         
         c8c_rms_comp(j) = sqrt(mean(e_T_gated(res_raw.mask_eval).^2));
         c8c_gamma_dev(j) = max(max(abs(gamma_L_gated - 1.0)), max(abs(gamma_R_gated - 1.0)));
-        c8c_active_ratio(j) = 100.0 * mean(gamma_L_gated(res_raw.mask_eval) ~= 1.0);
+        
+        % 对延迟后实际施加在执行器上的门控状态统计真实激活时间比例
+        gate_L_del = ones(N_pts, 1);
+        gate_R_del = ones(N_pts, 1);
+        if dL_act < N_pts, gate_L_del((dL_act+1):N_pts) = gamma_L_gated(1:(N_pts-dL_act)); end
+        if dR_act < N_pts, gate_R_del((dR_act+1):N_pts) = gamma_R_gated(1:(N_pts-dR_act)); end
+        active_gate = (abs(gate_L_del - 1.0) > 1e-12) | (abs(gate_R_del - 1.0) > 1e-12);
+        c8c_active_ratio(j) = 100.0 * mean(active_gate(res_raw.mask_eval));
+        
+        % C8C 补充真实 RK4 动力学重积分
+        x_gate = zeros(4, 1);
+        alpha_gate = zeros(N_pts, 1);
+        for k = 1:N_pts
+            [x_next, ~] = gantry_dynamics_step_rk4( ...
+                x_gate, iL_g_app(k), iR_g_app(k), ...
+                d_sym.mech, d_sym.plant, ...
+                0.0, 0.0, 0.0, d_sym.dt, ...
+                d_sym.Kf_L, d_sym.Kf_R);
+            alpha_gate(k) = x_gate(2);
+            x_gate = x_next;
+        end
+        rms_alpha_gate = sqrt(mean(alpha_gate(res_raw.mask_eval).^2));
+        c8c_rms_alpha_gate(j) = rms_alpha_gate;
+        
+        rms_alpha_base = res_raw.rms_alpha_base_dyn;
+        if rms_alpha_base > 1e-12
+            c8c_eta_alpha_gate(j) = 100.0 * (1.0 - rms_alpha_gate / rms_alpha_base);
+        else
+            c8c_eta_alpha_gate(j) = NaN;
+        end
     end
     
-    mean_rms_comp_c = mean(c8c_rms_comp);
-    max_rms_comp_c  = max(c8c_rms_comp);
-    max_gamma_dev_c = max(c8c_gamma_dev);
-    mean_active_rt_c= mean(c8c_active_ratio);
+    mean_rms_comp_c       = mean(c8c_rms_comp);
+    max_rms_comp_c        = max(c8c_rms_comp);
+    max_gamma_dev_c       = max(c8c_gamma_dev);
+    mean_active_rt_c      = mean(c8c_active_ratio);
+    mean_rms_alpha_gate_c = mean(c8c_rms_alpha_gate);
+    mean_eta_alpha_gate_c = mean(c8c_eta_alpha_gate);
     
     fprintf('  [C8C 门控评测结果]:\n');
-    fprintf('    - 门控后虚假补偿激活时间比例均值: %5.2f%% (对比 C8A 原始估计超标 %.2f%%)\n', ...
+    fprintf('    - 门控后虚假补偿执行激活时间比例均值: %5.2f%% (对比 C8A 原始估计超标 %.2f%%)\n', ...
         mean_active_rt_c, time_exceed_mean_a);
     fprintf('    - 门控后最大前馈偏离度 max|gamma-1|: %.4f%% (对比 C8A 原始 %.4f%%)\n', ...
         max_gamma_dev_c * 100, max_gamma_dev_a * 100);
     fprintf('    - 门控后虚假诱导偏航力矩最大 RMS : %.4e Nm (对比 C8A 原始 %.4e Nm)\n', ...
         max_rms_comp_c, max_rms_comp_a);
-    status_c8c = 'GATED_APPLICATION_EVAL';
-    fprintf('  [C8C 综合评测状态]: [%s]\n', status_c8c);
+    fprintf('    - 门控后物理偏航角 RMS (RK4 重积分): %.4e rad (对比基线 %.4e rad, 改善度: %5.2f%%)\n', ...
+        mean_rms_alpha_gate_c, mean(c8a_alpha_base), mean_eta_alpha_gate_c);
+    status_c8c = 'GATED_APPLICATION_EVAL_ONLY';
+    fprintf('  [C8C 综合评测状态]: [%s] (仅作应用层门控开环评估，未解决根本估计失效)\n', status_c8c);
     
     perf_rows(end+1, :) = { ...
         'r100 (Delta_Kf = 0)', 'TestC8C_GatedApplication', 'Nominal_Hardware_Limit', Imax_nominal, ...
-        'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'Gated_Compensation_Evaluation', ...
+        'param_init.ctrl.spd_max_out', 'Step3C_Replay', 'CAUSAL_GATED_REPLAY', 'Gated_Compensation_Evaluation', ...
         sprintf('ThetaOn=1e-5;ThetaOff=0.7e-5;Confirm=200ms;N%d', N_mc_c8), ...
         '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c8), 0.0, ...
-        NaN, NaN, NaN, NaN, ... % 不篡改原始估计器统计
-        NaN, ...
+        NaN, NaN, NaN, NaN, ...
+        NaN, NaN, ...
         NaN, NaN, 1.0, 1.0, max_gamma_dev_c, 'VALID', ...
         0, NaN, NaN, NaN, ...
-        0.0, mean_rms_comp_c, NaN, NaN, ...
-        mean(c8a_alpha_base), NaN, NaN, NaN, ...
+        mean(c8a_rms_base), mean_rms_comp_c, NaN, NaN, ...
+        mean(c8a_alpha_base), mean_rms_alpha_gate_c, mean_eta_alpha_gate_c, NaN, ...
         NaN, NaN, NaN, NaN, ...
-        0.0, 0.0, ...
-        0.0, 0, ...
+        mean(c8a_base_sat), NaN, ...
+        NaN, 0, ...
         NaN, NaN, NaN, ...
         mean_rms_comp_c, max_rms_comp_c, mean_active_rt_c, NaN, ...
         NaN, NaN, NaN, NaN, ...
@@ -956,21 +1144,22 @@ function verify_step3c_part2()
         status_c8c};
     
     %% =========================================================================
-    %% CSV 结果表规范导出与结构完整性严格回读检验 (三表独立架构)
+    %% CSV 结果表规范导出与结构完整性严格回读检验 (四表独立架构)
     %% =========================================================================
     fprintf('\n=========================================================================\n');
-    fprintf('>>> 正在导出 Step 3C-2 评测数据表 (三表独立架构)...\n');
-    fprintf('    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能)\n');
-    fprintf('    表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜)\n');
-    fprintf('    表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断)\n');
+    fprintf('>>> 正在导出 Step 3C-2 评测数据表 (四表独立架构)...\n');
+    fprintf('    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x61)\n');
+    fprintf('    表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜, 20x13)\n');
+    fprintf('    表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断, 2x12)\n');
+    fprintf('    表 4: step3c_c8a_deterministic_results.csv (C8A 4 种最劣差模工况, 4x9)\n');
     fprintf('=========================================================================\n');
     
     perf_header = { ...
         'Case', 'Test_Item', 'Limit_Scenario', 'Imax_counts', 'Imax_Source', ...
-        'Param_Source', 'Disturbance_Type', 'Disturbance_Intensity', ...
+        'Param_Source', 'Application_Mode', 'Disturbance_Type', 'Disturbance_Intensity', ...
         'Random_Seed', 'Trial_Index', 'Delta_Kf_True', ...
         'Delta_Kf_Hat_Mean', 'Delta_Kf_Hat_Median', 'Delta_Kf_AbsError_P95', 'Delta_Kf_RMSE', ...
-        'theta_payload_bias', ...
+        'theta_payload_bias', 'theta_payload_bias_p95_abs', ...
         'KfL_Hat', 'KfR_Hat', 'gamma_L', 'gamma_R', 'gamma_dev_max', 'Calibration_Validity', ...
         'invalid_calib_count', 'eta_kf_residual', 'eta_total_mean', 'eta_total_p05', ...
         'RMS_T_res_base', 'RMS_T_res_comp', 'RMS_T_total_base', 'RMS_T_total_comp', ...
@@ -1010,16 +1199,25 @@ function verify_step3c_part2()
     writetable(T_proj, file_proj);
     fprintf('    [OK] 表 3 导出成功 (%d 行 x %d 列): %s\n', height(T_proj), width(T_proj), file_proj);
     
+    det_header = {'Case', 'theta_hat', 'gamma_dev_max', 'rms_comp', 'd_act_L', 'd_act_R', 'delta_g_L', 'delta_g_R', 'Status'};
+    T_det = cell2table(det_rows, 'VariableNames', det_header);
+    file_det = fullfile(script_dir, 'step3c_c8a_deterministic_results.csv');
+    writetable(T_det, file_det);
+    fprintf('    [OK] 表 4 导出成功 (%d 行 x %d 列): %s\n', height(T_det), width(T_det), file_det);
+    
     % 回读结构与逐字段内存值绝对误差一致性断言
     fprintf('\n>>> 正在执行 CSV 物理结构与字段对齐回读检验 (readtable 逐项数值绝对相等断言)...\n');
     T_perf_read = readtable(file_perf);
     T_sens_read = readtable(file_sens);
     T_proj_read = readtable(file_proj);
+    T_det_read  = readtable(file_det);
     
     assert(height(T_perf_read) == 19, '性能表行数必须为 19 行 (14 C4 + 2 C5 + 1 C8A + 1 C8B + 1 C8C)');
-    assert(width(T_perf_read) == length(perf_header), '性能表列数不匹配');
+    assert(width(T_perf_read) == length(perf_header), sprintf('性能表列数不匹配 (期望 %d, 实际 %d)', length(perf_header), width(T_perf_read)));
     assert(height(T_sens_read) == 20, '灵敏度表行数必须为 20 行 (5因素 x 2指标 x 2数据集)');
     assert(height(T_proj_read) == 2,  '投影表行数必须为 2 行 (r070 + r130)');
+    assert(height(T_det_read) == 4,   '确定性差模表必须为 4 行');
+    assert(width(T_det_read) == 9,    '确定性差模表列数必须为 9 列');
     
     c8a_idx = find(strcmp(T_perf_read.Test_Item, 'TestC8A_SensorCommFalseComp'));
     assert(~isempty(c8a_idx), 'C8A 记录缺失');
@@ -1032,15 +1230,23 @@ function verify_step3c_part2()
     c8b_idx = find(strcmp(T_perf_read.Test_Item, 'TestC8B_PayloadConfounding'));
     assert(~isempty(c8b_idx), 'C8B 记录缺失');
     assert(abs(T_perf_read.theta_payload_bias(c8b_idx) - mean_payload_bias_b) < 1e-12, 'C8B payload_bias 回读不一致');
+    assert(abs(T_perf_read.theta_payload_bias_p95_abs(c8b_idx) - p95_payload_bias_b) < 1e-12, 'C8B payload_bias_p95 回读不一致');
     
     c8c_idx = find(strcmp(T_perf_read.Test_Item, 'TestC8C_GatedApplication'));
     assert(~isempty(c8c_idx), 'C8C 记录缺失');
     assert(abs(T_perf_read.rms_comp_max(c8c_idx) - max_rms_comp_c) < 1e-12, 'C8C rms_comp_max 回读不一致');
+    assert(abs(T_perf_read.RMS_alpha_comp_dyn(c8c_idx) - mean_rms_alpha_gate_c) < 1e-12, 'C8C RMS_alpha_comp_dyn 回读不一致');
+    assert(abs(T_perf_read.eta_alpha_abs(c8c_idx) - mean_eta_alpha_gate_c) < 1e-12, 'C8C eta_alpha_abs 回读不一致');
     
     assert(abs(T_proj_read.Low_Clip_Count(1) - proj_rows{1, 6}) < 1e-12, 'C7 Low_Clip_Count 回读不一致');
     assert(abs(T_proj_read.High_Clip_Count(2) - proj_rows{2, 7}) < 1e-12, 'C7 High_Clip_Count 回读不一致');
     
-    fprintf('    [OK] 三表回读行列数、字段语义与关键数值逐项绝对相等断言全部成立!\n\n');
+    for di = 1:4
+        assert(abs(T_det_read.theta_hat(di) - det_rows{di, 2}) < 1e-12, '确定性差模 theta_hat 回读不一致');
+        assert(abs(T_det_read.rms_comp(di) - det_rows{di, 4}) < 1e-12, '确定性差模 rms_comp 回读不一致');
+    end
+    
+    fprintf('    [OK] 四表回读行列数、字段语义与关键数值逐项绝对相等断言全部成立!\n\n');
     fprintf('=========================================================================\n');
     fprintf('   STEP 3C-2 测试执行与数据归档完成!                                     \n');
     fprintf('   C8A 原始估计器状态: [%s], 超标时间比例均值 = %5.2f%%                  \n', ...
