@@ -143,6 +143,17 @@ function verify_step3c_part2()
                 d_val, res_c4.theta_hat, theta_payload_bias, res_c4.eta_sat, res_c4.eta_alpha_abs, status_c4);
             
             gamma_dev_c4 = max(abs(res_c4.gamma_L - 1.0), abs(res_c4.gamma_R - 1.0));
+            if isfinite(res_c4.eta_total)
+                c4_eta_tot_mean = res_c4.eta_total;
+                c4_eta_tot_p05  = res_c4.eta_total;
+                c4_eta_tot_min  = res_c4.eta_total;
+                c4_eta_tot_cnt  = 1;
+            else
+                c4_eta_tot_mean = NaN;
+                c4_eta_tot_p05  = NaN;
+                c4_eta_tot_min  = NaN;
+                c4_eta_tot_cnt  = 0;
+            end
             
             perf_rows(end+1, :) = { ...
                 d_tag, item_name, 'Nominal_Hardware_Limit', Imax_nominal, ...
@@ -150,8 +161,8 @@ function verify_step3c_part2()
                 'Deterministic', 'Single', ds.Delta_Kf_true, ...
                 res_c4.theta_hat, res_c4.theta_hat, err_c4, err_c4, err_c4, ...
                 theta_payload_bias, NaN, ...
-                res_c4.Kf_L_hat, res_c4.Kf_R_hat, res_c4.gamma_L, res_c4.gamma_R, gamma_dev_c4, res_c4.calib_validity_str, ...
-                0, res_c4.eta_kf_residual, res_c4.eta_total, res_c4.eta_total, res_c4.eta_total, ...
+                res_c4.Kf_L_hat, res_c4.Kf_R_hat, res_c4.gamma_L, res_c4.gamma_R, gamma_dev_c4, NaN, res_c4.calib_validity_str, ...
+                0, res_c4.eta_kf_residual, c4_eta_tot_mean, c4_eta_tot_p05, c4_eta_tot_min, c4_eta_tot_cnt, ...
                 res_c4.rms_base, res_c4.rms_comp, res_c4.rms_total_base, res_c4.rms_total_comp, ...
                 res_c4.rms_alpha_base_dyn, res_c4.rms_alpha_comp_dyn, NaN, res_c4.eta_alpha_abs, res_c4.eta_alpha_delay, ...
                 res_c4.rms_dalpha_base, res_c4.rms_dalpha_comp, res_c4.alpha_ss_base, res_c4.alpha_ss_comp, ...
@@ -358,13 +369,27 @@ function verify_step3c_part2()
             exceed_rt_arr(j)      = res_j.exceed_false_ratio;
         end
         
-        eta_total_mean         = mean(eta_tot_arr);
-        eta_total_p05          = prctile(eta_tot_arr, 5);
-        eta_total_min          = min(eta_tot_arr);
+        eta_total_valid_c5     = eta_tot_arr(isfinite(eta_tot_arr));
+        eta_total_valid_cnt_c5 = numel(eta_total_valid_c5);
+        if eta_total_valid_cnt_c5 == 0
+            eta_total_mean = NaN;
+            eta_total_p05  = NaN;
+            eta_total_min  = NaN;
+        else
+            eta_total_mean = mean(eta_total_valid_c5);
+            eta_total_p05  = prctile(eta_total_valid_c5, 5);
+            eta_total_min  = min(eta_total_valid_c5);
+        end
+        
         eta_kf_p05             = prctile(eta_sat_arr, 5);
         RMS_alpha_comp_mean    = mean(rms_alpha_arr);
         RMS_alpha_comp_p95     = prctile(rms_alpha_arr, 95);
         invalid_calib_count    = sum(~calib_valid_arr);
+        if invalid_calib_count == 0
+            calib_valid_str_c5 = 'VALID';
+        else
+            calib_valid_str_c5 = 'INVALID';
+        end
         projection_trial_ratio = 100.0 * sum(clip_count_arr > 0) / N_mc_c5;
         
         abs_errs          = abs(theta_hat_arr - ds.Delta_Kf_true);
@@ -393,8 +418,8 @@ function verify_step3c_part2()
             '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c5), ds.Delta_Kf_true, ...
             mean(theta_hat_arr), median_hat_c5, median_abs_err_c5, p95_err, rmse_err, ...
             NaN, NaN, ...
-            mean(Kf_L_hat_arr), mean(Kf_R_hat_arr), mean(gamma_L_arr), mean(gamma_R_arr), max(gamma_dev_arr), 'VALID', ...
-            invalid_calib_count, eta_kf_p05, eta_total_mean, eta_total_p05, eta_total_min, ...
+            mean(Kf_L_hat_arr), mean(Kf_R_hat_arr), mean(gamma_L_arr), mean(gamma_R_arr), max(gamma_dev_arr), NaN, calib_valid_str_c5, ...
+            invalid_calib_count, eta_kf_p05, eta_total_mean, eta_total_p05, eta_total_min, eta_total_valid_cnt_c5, ...
             mean(rms_base_arr), mean(rms_comp_arr), mean(rms_tot_b_arr), mean(rms_tot_c_arr), ...
             mean(rms_alpha_base_arr), RMS_alpha_comp_mean, RMS_alpha_comp_p95, mean(eta_alpha_abs_arr), mean(eta_alpha_del_arr), ...
             mean(rms_dalpha_b_arr), mean(rms_dalpha_c_arr), mean(alpha_ss_b_arr), mean(alpha_ss_c_arr), ...
@@ -659,7 +684,7 @@ function verify_step3c_part2()
     fprintf('>>> 开始执行 [Test C8] 标称物理对称模型的虚假补偿深度评测 (Monte Carlo N = 100)\n');
     fprintf('    C8A: 全要素噪声与增益漂移下的原始估计器评测 (RAW_ESTIMATOR_FAIL)\n');
     fprintf('    C8B: 机械偏载对对称系统的混淆诊断 (DIAGNOSTIC_PAYLOAD_CONFOUNDING)\n');
-    fprintf('    C8C: 独立迟滞门限控制仿真验证 (GATED_APPLICATION_EVAL)\n');
+    fprintf('    C8C: 独立迟滞门限控制仿真验证 (GATED_APPLICATION_EVAL_ONLY)\n');
     fprintf('=========================================================================\n');
     
     N_mc_c8 = 100;
@@ -786,9 +811,25 @@ function verify_step3c_part2()
     trial_exceed_cnt_a   = sum(c8a_abs_theta > 1.0e-5);
     trial_exceed_rt_a    = 100.0 * trial_exceed_cnt_a / N_mc_c8;
     
-    eta_tot_mean_a       = mean(c8a_eta_total);
-    eta_tot_p05_a        = prctile(c8a_eta_total, 5);
-    eta_tot_min_a        = min(c8a_eta_total);
+    eta_total_valid_a    = c8a_eta_total(isfinite(c8a_eta_total));
+    eta_total_valid_cnt_a= numel(eta_total_valid_a);
+    if eta_total_valid_cnt_a == 0
+        eta_tot_mean_a = NaN;
+        eta_tot_p05_a  = NaN;
+        eta_tot_min_a  = NaN;
+    else
+        eta_tot_mean_a = mean(eta_total_valid_a);
+        eta_tot_p05_a  = prctile(eta_total_valid_a, 5);
+        eta_tot_min_a  = min(eta_total_valid_a);
+    end
+    
+    invalid_calib_cnt_a  = sum(~c8a_calib_val);
+    if invalid_calib_cnt_a == 0
+        calib_valid_str_a = 'VALID';
+    else
+        calib_valid_str_a = 'INVALID';
+    end
+    
     alpha_comp_mean_a    = mean(c8a_alpha_comp);
     alpha_comp_p95_a     = prctile(c8a_alpha_comp, 95);
     
@@ -874,8 +915,8 @@ function verify_step3c_part2()
         '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c8), 0.0, ...
         mean(c8a_theta_hat), median_hat_a, median_abs_error_a, p95_theta_a, rmse_theta_a, ...
         NaN, NaN, ...
-        mean(c8a_KfL_hat), mean(c8a_KfR_hat), mean(c8a_gamma_L), mean(c8a_gamma_R), max_gamma_dev_a, 'VALID', ...
-        sum(~c8a_calib_val), mean(c8a_eta_kf_res), eta_tot_mean_a, eta_tot_p05_a, eta_tot_min_a, ...
+        mean(c8a_KfL_hat), mean(c8a_KfR_hat), mean(c8a_gamma_L), mean(c8a_gamma_R), max_gamma_dev_a, NaN, calib_valid_str_a, ...
+        invalid_calib_cnt_a, mean(c8a_eta_kf_res), eta_tot_mean_a, eta_tot_p05_a, eta_tot_min_a, eta_total_valid_cnt_a, ...
         mean(c8a_rms_base), mean(c8a_rms_comp), mean(c8a_rms_tot_b), mean(c8a_rms_tot_c), ...
         mean(c8a_alpha_base), alpha_comp_mean_a, alpha_comp_p95_a, mean(c8a_eta_alpha_abs), mean(c8a_eta_alpha_del), ...
         mean(c8a_rms_dalpha_b), mean(c8a_rms_dalpha_c), mean(c8a_alpha_ss_b), mean(c8a_alpha_ss_c), ...
@@ -990,9 +1031,25 @@ function verify_step3c_part2()
     mean_payload_bias_b= mean(c8b_payload_bias);
     p95_payload_bias_b = prctile(abs(c8b_payload_bias), 95);
     
-    eta_tot_mean_b     = mean(c8b_eta_total);
-    eta_tot_p05_b      = prctile(c8b_eta_total, 5);
-    eta_tot_min_b      = min(c8b_eta_total);
+    eta_total_valid_b     = c8b_eta_total(isfinite(c8b_eta_total));
+    eta_total_valid_cnt_b = numel(eta_total_valid_b);
+    if eta_total_valid_cnt_b == 0
+        eta_tot_mean_b = NaN;
+        eta_tot_p05_b  = NaN;
+        eta_tot_min_b  = NaN;
+    else
+        eta_tot_mean_b = mean(eta_total_valid_b);
+        eta_tot_p05_b  = prctile(eta_total_valid_b, 5);
+        eta_tot_min_b  = min(eta_total_valid_b);
+    end
+    
+    invalid_calib_cnt_b = sum(~c8b_calib_val);
+    if invalid_calib_cnt_b == 0
+        calib_valid_str_b = 'VALID';
+    else
+        calib_valid_str_b = 'INVALID';
+    end
+    
     alpha_comp_mean_b  = mean(c8b_alpha_comp);
     alpha_comp_p95_b   = prctile(c8b_alpha_comp, 95);
     
@@ -1013,8 +1070,8 @@ function verify_step3c_part2()
         '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c8), 0.0, ...
         mean(c8b_theta_hat), median_hat_b, median_abs_error_b, p95_theta_b, rmse_theta_b, ...
         mean_payload_bias_b, p95_payload_bias_b, ...
-        mean(c8b_KfL_hat), mean(c8b_KfR_hat), mean(c8b_gamma_L), mean(c8b_gamma_R), max_gamma_dev_b, 'VALID', ...
-        sum(~c8b_calib_val), mean(c8b_eta_kf_res), eta_tot_mean_b, eta_tot_p05_b, eta_tot_min_b, ...
+        mean(c8b_KfL_hat), mean(c8b_KfR_hat), mean(c8b_gamma_L), mean(c8b_gamma_R), max_gamma_dev_b, NaN, calib_valid_str_b, ...
+        invalid_calib_cnt_b, mean(c8b_eta_kf_res), eta_tot_mean_b, eta_tot_p05_b, eta_tot_min_b, eta_total_valid_cnt_b, ...
         mean(c8b_rms_base), mean(c8b_rms_comp), mean(c8b_rms_tot_b), mean(c8b_rms_tot_c), ...
         mean(c8b_alpha_base), alpha_comp_mean_b, alpha_comp_p95_b, mean(c8b_eta_alpha_abs), mean(c8b_eta_alpha_del), ...
         mean(c8b_rms_dalpha_b), mean(c8b_rms_dalpha_c), mean(c8b_alpha_ss_b), mean(c8b_alpha_ss_c), ...
@@ -1035,14 +1092,15 @@ function verify_step3c_part2()
     theta_off = 0.7e-5;
     N_confirm = round(0.20 / d_sym.dt); % 200 ms 确认窗口
     
-    c8c_rms_comp       = zeros(N_mc_c8, 1);
-    c8c_gamma_dev      = zeros(N_mc_c8, 1);
-    c8c_active_ratio   = zeros(N_mc_c8, 1);
-    c8c_rms_alpha_gate = zeros(N_mc_c8, 1);
-    c8c_eta_alpha_gate = zeros(N_mc_c8, 1);
-    c8c_gamma_L_mean   = zeros(N_mc_c8, 1);
-    c8c_gamma_R_mean   = zeros(N_mc_c8, 1);
-    c8c_comp_sat       = zeros(N_mc_c8, 1);
+    c8c_rms_comp        = zeros(N_mc_c8, 1);
+    c8c_gamma_dev       = zeros(N_mc_c8, 1);
+    c8c_gamma_final_dev = zeros(N_mc_c8, 1);
+    c8c_active_ratio    = zeros(N_mc_c8, 1);
+    c8c_rms_alpha_gate  = zeros(N_mc_c8, 1);
+    c8c_eta_alpha_gate  = zeros(N_mc_c8, 1);
+    c8c_gamma_L_mean    = zeros(N_mc_c8, 1);
+    c8c_gamma_R_mean    = zeros(N_mc_c8, 1);
+    c8c_comp_sat        = zeros(N_mc_c8, 1);
     
     for j = 1:N_mc_c8
         res_raw = c8a_res_store{j};
@@ -1106,13 +1164,18 @@ function verify_step3c_part2()
         e_T_gated = T_alpha_g - T_alpha_nom;
         
         c8c_rms_comp(j) = sqrt(mean(e_T_gated(res_raw.mask_eval).^2));
-        c8c_gamma_dev(j) = max(max(abs(gamma_L_gated - 1.0)), max(abs(gamma_R_gated - 1.0)));
         
         % 对延迟后实际施加在执行器上的门控状态统计真实激活时间比例与实际增益
         gate_L_del = ones(N_pts, 1);
         gate_R_del = ones(N_pts, 1);
         if dL_act < N_pts, gate_L_del((dL_act+1):N_pts) = gamma_L_gated(1:(N_pts-dL_act)); end
         if dR_act < N_pts, gate_R_del((dR_act+1):N_pts) = gamma_R_gated(1:(N_pts-dR_act)); end
+        
+        mask_ev = res_raw.mask_eval;
+        c8c_gamma_dev(j) = max([abs(gate_L_del(mask_ev) - 1.0); abs(gate_R_del(mask_ev) - 1.0)]);
+        idx_eval_end_j = find(res_raw.t <= res_raw.t_eval_end, 1, 'last');
+        c8c_gamma_final_dev(j) = max(abs(gate_L_del(idx_eval_end_j) - 1.0), abs(gate_R_del(idx_eval_end_j) - 1.0));
+        
         active_gate = (abs(gate_L_del - 1.0) > 1e-12) | (abs(gate_R_del - 1.0) > 1e-12);
         c8c_active_ratio(j) = 100.0 * mean(active_gate(res_raw.mask_eval));
         c8c_gamma_L_mean(j) = mean(gate_L_del(res_raw.mask_eval));
@@ -1142,22 +1205,25 @@ function verify_step3c_part2()
         end
     end
     
-    mean_rms_comp_c       = mean(c8c_rms_comp);
-    max_rms_comp_c        = max(c8c_rms_comp);
-    max_gamma_dev_c       = max(c8c_gamma_dev);
-    mean_active_rt_c      = mean(c8c_active_ratio);
-    mean_rms_alpha_gate_c = mean(c8c_rms_alpha_gate);
-    p95_rms_alpha_gate_c  = prctile(c8c_rms_alpha_gate, 95);
-    mean_eta_alpha_gate_c = mean(c8c_eta_alpha_gate);
-    mean_gamma_L_c        = mean(c8c_gamma_L_mean);
-    mean_gamma_R_c        = mean(c8c_gamma_R_mean);
-    mean_comp_sat_c       = mean(c8c_comp_sat);
+    mean_rms_comp_c         = mean(c8c_rms_comp);
+    max_rms_comp_c          = max(c8c_rms_comp);
+    max_gamma_final_dev_c   = max(c8c_gamma_final_dev);
+    max_gamma_applied_dev_c = max(c8c_gamma_dev);
+    mean_active_rt_c        = mean(c8c_active_ratio);
+    mean_rms_alpha_gate_c   = mean(c8c_rms_alpha_gate);
+    p95_rms_alpha_gate_c    = prctile(c8c_rms_alpha_gate, 95);
+    mean_eta_alpha_gate_c   = mean(c8c_eta_alpha_gate);
+    mean_gamma_L_c          = mean(c8c_gamma_L_mean);
+    mean_gamma_R_c          = mean(c8c_gamma_R_mean);
+    mean_comp_sat_c         = mean(c8c_comp_sat);
     
     fprintf('  [C8C 门控评测结果]:\n');
     fprintf('    - 门控后虚假补偿执行激活时间比例均值: %5.2f%% (对比 C8A 原始估计超标 %.2f%%)\n', ...
         mean_active_rt_c, time_exceed_mean_a);
-    fprintf('    - 门控后最大前馈偏离度 max|gamma-1|: %.4f%% (对比 C8A 原始 %.4f%%)\n', ...
-        max_gamma_dev_c * 100, max_gamma_dev_a * 100);
+    fprintf('    - 门控后实际生效增益最大偏离度 (时序峰值): %.4f%%\n', ...
+        max_gamma_applied_dev_c * 100);
+    fprintf('    - 门控后终止静态增益最大偏离度 (终点截断): %.4f%% (对比 C8A 原始静态 %.4f%%)\n', ...
+        max_gamma_final_dev_c * 100, max_gamma_dev_a * 100);
     fprintf('    - 门控后虚假诱导偏航力矩最大 RMS : %.4e Nm (对比 C8A 原始 %.4e Nm)\n', ...
         max_rms_comp_c, max_rms_comp_a);
     fprintf('    - 门控后物理偏航角 RMS (RK4 重积分): %.4e rad (对比基线 %.4e rad, 改善度: %5.2f%%)\n', ...
@@ -1172,8 +1238,8 @@ function verify_step3c_part2()
         '20260924+1..100', sprintf('MC_%d_Trials', N_mc_c8), 0.0, ...
         NaN, NaN, NaN, NaN, NaN, ...
         NaN, NaN, ...
-        NaN, NaN, mean_gamma_L_c, mean_gamma_R_c, max_gamma_dev_c, 'NOT_APPLICABLE', ...
-        NaN, NaN, NaN, NaN, NaN, ...
+        NaN, NaN, mean_gamma_L_c, mean_gamma_R_c, max_gamma_final_dev_c, max_gamma_applied_dev_c, 'NOT_APPLICABLE', ...
+        NaN, NaN, NaN, NaN, NaN, NaN, ...
         mean(c8a_rms_base), mean_rms_comp_c, NaN, NaN, ...
         mean(c8a_alpha_base), mean_rms_alpha_gate_c, p95_rms_alpha_gate_c, mean_eta_alpha_gate_c, NaN, ...
         NaN, NaN, NaN, NaN, ...
@@ -1191,7 +1257,7 @@ function verify_step3c_part2()
     %% =========================================================================
     fprintf('\n=========================================================================\n');
     fprintf('>>> 正在导出 Step 3C-2 评测数据表 (四表独立架构)...\n');
-    fprintf('    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x66)\n');
+    fprintf('    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x68)\n');
     fprintf('    表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜, 20x13)\n');
     fprintf('    表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断, 2x12)\n');
     fprintf('    表 4: step3c_c8a_deterministic_results.csv (C8A 4 种最劣差模工况, 4x9)\n');
@@ -1203,8 +1269,8 @@ function verify_step3c_part2()
         'Random_Seed', 'Trial_Index', 'Delta_Kf_True', ...
         'Delta_Kf_Hat_Mean', 'Delta_Kf_Hat_Median', 'Delta_Kf_AbsError_Median', 'Delta_Kf_AbsError_P95', 'Delta_Kf_RMSE', ...
         'theta_payload_bias', 'theta_payload_bias_p95_abs', ...
-        'KfL_Hat', 'KfR_Hat', 'gamma_L', 'gamma_R', 'gamma_dev_max', 'Calibration_Validity', ...
-        'invalid_calib_count', 'eta_kf_residual', 'eta_total_mean', 'eta_total_p05', 'eta_total_min', ...
+        'KfL_Hat', 'KfR_Hat', 'gamma_L', 'gamma_R', 'gamma_final_dev_max', 'gamma_applied_timeseries_dev_max', 'Calibration_Validity', ...
+        'invalid_calib_count', 'eta_kf_residual', 'eta_total_mean', 'eta_total_p05', 'eta_total_min', 'eta_total_valid_count', ...
         'RMS_T_res_base', 'RMS_T_res_comp', 'RMS_T_total_base', 'RMS_T_total_comp', ...
         'RMS_alpha_base_dyn', 'RMS_alpha_comp_dyn_mean', 'RMS_alpha_comp_dyn_p95', 'eta_alpha_abs', 'eta_alpha_delay', ...
         'RMS_dalpha_base_dyn', 'RMS_dalpha_comp_dyn', 'alpha_ss_base', 'alpha_ss_comp', ...
@@ -1257,7 +1323,7 @@ function verify_step3c_part2()
     T_det_read  = readtable(file_det);
     
     assert(height(T_perf_read) == 19, '性能表行数必须为 19 行 (14 C4 + 2 C5 + 1 C8A + 1 C8B + 1 C8C)');
-    assert(width(T_perf_read) == length(perf_header), sprintf('性能表列数不匹配 (期望 %d, 实际 %d)', length(perf_header), width(T_perf_read)));
+    assert(width(T_perf_read) == 68, sprintf('性能表列数不匹配 (期望 68, 实际 %d)', width(T_perf_read)));
     assert(height(T_sens_read) == 20, '灵敏度表行数必须为 20 行 (5因素 x 2指标 x 2数据集)');
     assert(height(T_proj_read) == 2,  '投影表行数必须为 2 行 (r070 + r130)');
     assert(height(T_det_read) == 4,   '确定性差模表必须为 4 行');
@@ -1267,7 +1333,9 @@ function verify_step3c_part2()
     assert(~isempty(c8a_idx), 'C8A 记录缺失');
     assert(abs(T_perf_read.theta_exceed_time_mean(c8a_idx) - time_exceed_mean_a) < 1e-12, 'theta_exceed_time_mean 回读不一致');
     assert(abs(T_perf_read.rms_comp_max(c8a_idx) - max_rms_comp_a) < 1e-12, 'rms_comp_max 回读不一致');
-    assert(abs(T_perf_read.gamma_dev_max(c8a_idx) - max_gamma_dev_a) < 1e-12, 'gamma_dev_max 回读不一致');
+    assert(abs(T_perf_read.gamma_final_dev_max(c8a_idx) - max_gamma_dev_a) < 1e-12, 'gamma_final_dev_max 回读不一致');
+    assert(isnan(T_perf_read.gamma_applied_timeseries_dev_max(c8a_idx)), 'C8A gamma_applied_timeseries_dev_max 必须为 NaN');
+    assert(T_perf_read.eta_total_valid_count(c8a_idx) == eta_total_valid_cnt_a, 'C8A eta_total_valid_count 回读不一致');
     assert(abs(T_perf_read.Delta_Kf_Hat_Median(c8a_idx) - median_hat_a) < 1e-12, 'Delta_Kf_Hat_Median 回读不一致');
     assert(abs(T_perf_read.Delta_Kf_AbsError_Median(c8a_idx) - median_abs_error_a) < 1e-12, 'Delta_Kf_AbsError_Median 回读不一致');
     assert(abs(T_perf_read.max_run_p95(c8a_idx) - max_run_p95) < 1e-12, 'max_run_p95 回读不一致');
@@ -1278,6 +1346,13 @@ function verify_step3c_part2()
     assert(abs(T_perf_read.theta_payload_bias_p95_abs(c8b_idx) - p95_payload_bias_b) < 1e-12, 'C8B payload_bias_p95 回读不一致');
     assert(abs(T_perf_read.Delta_Kf_Hat_Median(c8b_idx) - median_hat_b) < 1e-12, 'C8B Delta_Kf_Hat_Median 回读不一致');
     assert(abs(T_perf_read.Delta_Kf_AbsError_Median(c8b_idx) - median_abs_error_b) < 1e-12, 'C8B Delta_Kf_AbsError_Median 回读不一致');
+    assert(abs(T_perf_read.gamma_final_dev_max(c8b_idx) - max_gamma_dev_b) < 1e-12, 'C8B gamma_final_dev_max 回读不一致');
+    assert(isnan(T_perf_read.gamma_applied_timeseries_dev_max(c8b_idx)), 'C8B gamma_applied_timeseries_dev_max 必须为 NaN');
+    assert(T_perf_read.eta_total_valid_count(c8b_idx) == 0, 'C8B eta_total_valid_count 必须为 0');
+    assert(isnan(T_perf_read.eta_total_mean(c8b_idx)), 'C8B eta_total_mean 必须为 NaN');
+    assert(isnan(T_perf_read.eta_total_p05(c8b_idx)), 'C8B eta_total_p05 必须为 NaN');
+    assert(isnan(T_perf_read.eta_total_min(c8b_idx)), 'C8B eta_total_min 必须为 NaN');
+    assert(strcmp(T_perf_read.Calibration_Validity{c8b_idx}, calib_valid_str_b), 'C8B Calibration_Validity 回读不一致');
     
     c8c_idx = find(strcmp(T_perf_read.Test_Item, 'TestC8C_GatedApplication'));
     assert(~isempty(c8c_idx), 'C8C 记录缺失');
@@ -1288,6 +1363,9 @@ function verify_step3c_part2()
     assert(abs(T_perf_read.gate_active_time_mean(c8c_idx) - mean_active_rt_c) < 1e-12, 'C8C gate_active_time_mean 回读不一致');
     assert(abs(T_perf_read.gamma_L(c8c_idx) - mean_gamma_L_c) < 1e-12, 'C8C gamma_L 回读不一致');
     assert(abs(T_perf_read.gamma_R(c8c_idx) - mean_gamma_R_c) < 1e-12, 'C8C gamma_R 回读不一致');
+    assert(abs(T_perf_read.gamma_final_dev_max(c8c_idx) - max_gamma_final_dev_c) < 1e-12, 'C8C gamma_final_dev_max 回读不一致');
+    assert(abs(T_perf_read.gamma_applied_timeseries_dev_max(c8c_idx) - max_gamma_applied_dev_c) < 1e-12, 'C8C gamma_applied_timeseries_dev_max 回读不一致');
+    assert(isnan(T_perf_read.eta_total_valid_count(c8c_idx)), 'C8C eta_total_valid_count 必须为 NaN');
     assert(abs(T_perf_read.comp_total_sat(c8c_idx) - mean_comp_sat_c) < 1e-12, 'C8C comp_total_sat 回读不一致');
     assert(strcmp(T_perf_read.Application_Mode{c8c_idx}, 'ONE_PASS_CAUSAL_GATED_REPLAY'), 'C8C Application_Mode 必须为 ONE_PASS_CAUSAL_GATED_REPLAY');
     assert(strcmp(T_perf_read.Calibration_Validity{c8c_idx}, 'NOT_APPLICABLE'), 'C8C Calibration_Validity 必须为 NOT_APPLICABLE');
@@ -1297,10 +1375,14 @@ function verify_step3c_part2()
     
     c5_idx = find(strcmp(T_perf_read.Test_Item, 'TestC5_TopWorstCorners_Noise_MC100'));
     assert(length(c5_idx) == 2, 'C5 记录数必须为 2');
+    assert(all(T_perf_read.eta_total_valid_count(c5_idx) == 100), 'C5 eta_total_valid_count 必须为 100');
+    assert(all(isnan(T_perf_read.gamma_applied_timeseries_dev_max(c5_idx))), 'C5 gamma_applied_timeseries_dev_max 必须为 NaN');
     assert(all(isfinite(T_perf_read.projection_trial_ratio(c5_idx))), 'C5 projection_trial_ratio 必须为有效有限值');
     assert(all(isnan(T_perf_read.theta_exceed_time_mean(c5_idx))), 'C5 theta_exceed_time_mean 必须为 NaN');
     assert(all(isnan(T_perf_read.gate_active_time_mean(c5_idx))), 'C5 gate_active_time_mean 必须为 NaN');
     
+    assert(all(T_perf_read.eta_total_valid_count(1:14) == 1), 'C4 eta_total_valid_count 必须为 1');
+    assert(all(isnan(T_perf_read.gamma_applied_timeseries_dev_max(1:14))), 'C4 gamma_applied_timeseries_dev_max 必须为 NaN');
     assert(isnan(T_perf_read.theta_exceed_time_mean(1)), 'C4 theta_exceed_time_mean 必须为 NaN');
     assert(isnan(T_perf_read.gate_active_time_mean(1)), 'C4 gate_active_time_mean 必须为 NaN');
     assert(isnan(T_perf_read.projection_trial_ratio(1)), 'C4 projection_trial_ratio 必须为 NaN');

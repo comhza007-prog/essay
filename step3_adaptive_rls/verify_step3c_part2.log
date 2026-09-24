@@ -137,7 +137,7 @@
 >>> 开始执行 [Test C8] 标称物理对称模型的虚假补偿深度评测 (Monte Carlo N = 100)
     C8A: 全要素噪声与增益漂移下的原始估计器评测 (RAW_ESTIMATOR_FAIL)
     C8B: 机械偏载对对称系统的混淆诊断 (DIAGNOSTIC_PAYLOAD_CONFOUNDING)
-    C8C: 独立迟滞门限控制仿真验证 (GATED_APPLICATION_EVAL)
+    C8C: 独立迟滞门限控制仿真验证 (GATED_APPLICATION_EVAL_ONLY)
 =========================================================================
 
 --- [C8A] 补齐扰动矩阵的虚假补偿评测 (TestC8A_SensorCommFalseComp, N = 100) ---
@@ -174,19 +174,20 @@
 --- [C8C] 独立迟滞门限控制仿真评测 (TestC8C_GatedApplication, N = 100) ---
   [C8C 门控评测结果]:
     - 门控后虚假补偿执行激活时间比例均值: 88.69% (对比 C8A 原始估计超标 92.75%)
-    - 门控后最大前馈偏离度 max|gamma-1|: 2.7110% (对比 C8A 原始 1.7599%)
+    - 门控后实际生效增益最大偏离度 (时序峰值): 2.0454%
+    - 门控后终止静态增益最大偏离度 (终点截断): 1.7599% (对比 C8A 原始静态 1.7599%)
     - 门控后虚假诱导偏航力矩最大 RMS : 9.6796e-02 Nm (对比 C8A 原始 9.7976e-02 Nm)
     - 门控后物理偏航角 RMS (RK4 重积分): 1.5820e-04 rad (对比基线 1.5712e-04 rad, 改善度: -0.69%)
   [C8C 综合评测状态]: [GATED_APPLICATION_EVAL_ONLY] (仅作应用层门控开环评估，未解决根本估计失效)
 
 =========================================================================
 >>> 正在导出 Step 3C-2 评测数据表 (四表独立架构)...
-    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x66)
+    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x68)
     表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜, 20x13)
     表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断, 2x12)
     表 4: step3c_c8a_deterministic_results.csv (C8A 4 种最劣差模工况, 4x9)
 =========================================================================
-    [OK] 表 1 导出成功 (19 行 x 66 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_performance_results.csv
+    [OK] 表 1 导出成功 (19 行 x 68 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_performance_results.csv
     [OK] 表 2 导出成功 (20 行 x 13 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_sensitivity_results.csv
     [OK] 表 3 导出成功 (2 行 x 12 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_projection_results.csv
     [OK] 表 4 导出成功 (4 行 x 9 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_c8a_deterministic_results.csv

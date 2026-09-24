@@ -457,12 +457,14 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
   在不改动底层控制器红线的前提下，完成时序修正（执行器延迟后状态统计）与**真实 RK4 动力学重积分**。
   **运行模式定性**：显式声明为 `ONE_PASS_CAUSAL_GATED_REPLAY`（单次因果门控反事实回放：估计序列来自未补偿基线试验；门控补偿后的状态不反馈至估计器重新递推）。
   **实际增益与饱和计算**：严格统计延迟后实际施加在执行器上的门控增益均值（$\gamma_L, \gamma_R$）与真实物理饱和时间比例 `comp_total_sat`；标定有效性标记为 `NOT_APPLICABLE`，失效计数与截断计数记为 `NaN`。
-  **结论收紧声明**：由于持续差模增益漂移未被根本消除，门控后执行激活时间仍达 $88.69\%$，最大增益偏离（$2.711\%$）甚至高于 C8A 原始值（$1.760\%$），RK4 重积分所得物理偏航角改善度为 $-0.69\%$（因门控阶跃突变带来微小扰动），因此**绝不能据此宣称物理偏角动态改善或虚假补偿已解决**，状态严格定性为 `GATED_APPLICATION_EVAL_ONLY`。
+  **结论收紧声明**：由于持续差模增益漂移未被根本消除，门控后执行激活时间仍达 $88.69\%$，生效增益时序峰值偏离达 $2.0454\%$（终点静态偏离为 $1.7599\%$），RK4 重积分所得物理偏航角改善度为 $-0.685\%$。在本次固定阈值、200 ms 确认门控及给定扰动分布下，观察到偏航角 RMS 轻微增加；由于尚未开展平滑门控与无门控时变补偿的匹配消融试验，暂不能将退化唯一归因于门控切换；本次门控配置未解决底层估计失效问题，状态严格定性为 `GATED_APPLICATION_EVAL_ONLY`。
 
 #### 4.5 四表独立 CSV 架构规范
 坚决杜绝不同语义字段混合，拆分为四个高内聚独立数据表：
-1. **`step3c_performance_results.csv`**（19 行 x 66 列）：
+1. **`step3c_performance_results.csv`**（19 行 x 68 列）：
    - 区分估计值有符号中位数（`Delta_Kf_Hat_Median`）与绝对误差中位数（`Delta_Kf_AbsError_Median`）；
+   - 显式分离终点静态标定偏离度（`gamma_final_dev_max`）与实际生效时序峰值偏离度（`gamma_applied_timeseries_dev_max`）；
+   - 统一采用有限样本统计并记录有效样本数（`eta_total_valid_count`）：C4 为 1，C5 为 100，C8A 为 100，C8B 为 0，C8C 为 `NaN`；若有效样本数为 0，则 `eta_total_mean`、`eta_total_p05` 与 `eta_total_min` 统一置为 `NaN`；
    - 细化总抑制率分布：`eta_total_mean`, `eta_total_p05`, `eta_total_min`；
    - 区分物理偏航均值与尾部：`RMS_alpha_comp_dyn_mean`, `RMS_alpha_comp_dyn_p95`；
    - 彻底拆分重用列，独立设立专用字段：

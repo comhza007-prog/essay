@@ -2,33 +2,34 @@
 
 > [!WARNING]
 > **评测属性与阶段验收结论声明**：
-> 1. **开环回放属性**：本报告全部数据来自龙门架开环指令回放与真实传感器因果测量重构，动力学推进严格调用项目唯一公共单步推演函数 [`output/common/gantry_dynamics_step_rk4.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/common/gantry_dynamics_step_rk4.m)。
-> 2. **闭环隔离红线**：本次评测严格禁止接入或修改 [`output/step3_adaptive_rls/controller_c3a_rls_robust.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/controller_c3a_rls_robust.m) 或 `SyncAlloc.m`。
-> 3. **验收状态严格定性**：依据技术审查红线，因 Test C8A 在全要素扰动矩阵下的超标时间比例（$92.75\% > 5.00\%$）明确失败，且 C8C 经补充真实 RK4 动力学重积分后物理偏角改善度为负（$-0.69\%$），证实应用层门控无法解决底层测量失真，**本报告结论严格定性为：“Step 3C-2 已执行但未通过最终技术验收”**。Step 3 严格保持开放（OPEN），坚决不提前关闭。
+> 1. **开环回放属性**：本报告全部数据来自龙门架开环指令回放与真实传感器因果测量重构，动力学推进严格调用项目唯一公共单步推演函数 [`common/gantry_dynamics_step_rk4.m`](../common/gantry_dynamics_step_rk4.m)。
+> 2. **闭环隔离红线**：本次评测严格禁止接入或修改 [`step3_adaptive_rls/controller_c3a_rls_robust.m`](../step3_adaptive_rls/controller_c3a_rls_robust.m) 或 `SyncAlloc.m`。
+> 3. **验收状态严格定性**：依据技术审查红线，因 Test C8A 在全要素扰动矩阵下的超标时间比例（$92.75\% > 5.00\%$）明确失败，且 C8C 经补充真实 RK4 动力学重积分后物理偏角改善度为负（$-0.69\%$），证实本次门控配置未解决底层测量失真，**本报告结论严格定性为：“Step 3C-2 已执行但未通过最终技术验收”**。Step 3 严格保持开放（OPEN），坚决不提前关闭。
 
 ---
 
 ## 1. 评测执行概况与四表独立数据结构
 
-依据技术审查意见与修订后的 [`output/docs/STEP3_IMPLEMENTATION_PLAN.md`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/docs/STEP3_IMPLEMENTATION_PLAN.md)，全面实施了第二阶段测试（Tests C4 ~ C8）。
+依据技术审查意见与修订后的 [`docs/STEP3_IMPLEMENTATION_PLAN.md`](STEP3_IMPLEMENTATION_PLAN.md)，全面实施了第二阶段测试（Tests C4 ~ C8）。
 
-所有测试由 [`output/step3_adaptive_rls/verify_step3c_part2.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/verify_step3c_part2.m) 统一驱动，规范导出为 **四个高内聚独立 CSV 数据表**：
+所有测试由 [`step3_adaptive_rls/verify_step3c_part2.m`](../step3_adaptive_rls/verify_step3c_part2.m) 统一驱动，规范导出为 **四个高内聚独立 CSV 数据表**：
 
-1. **综合性能结果表**：[`output/step3_adaptive_rls/step3c_performance_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_performance_results.csv)
-   - 记录 Test C4 (14 行)、C5 (2 行)、C8A (1 行)、C8B (1 行)、C8C (1 行) 共 **19 行 $\times$ 66 列**；
+1. **综合性能结果表**：[`step3_adaptive_rls/step3c_performance_results.csv`](../step3_adaptive_rls/step3c_performance_results.csv)
+   - 记录 Test C4 (14 行)、C5 (2 行)、C8A (1 行)、C8B (1 行)、C8C (1 行) 共 **19 行 $\times$ 68 列**；
    - 区分估计值有符号中位数（`Delta_Kf_Hat_Median`）与绝对误差中位数（`Delta_Kf_AbsError_Median`）；
-   - 显式分离总抑制率指标：`eta_total_mean`、`eta_total_p05`、以及专属 `eta_total_min` 列；
+   - 显式分离终点静态标定增益偏离度（`gamma_final_dev_max`）与评测窗口内实际生效时序峰值偏离度（`gamma_applied_timeseries_dev_max`）；
+   - 统一采用有限样本统计并记录有效样本数（`eta_total_valid_count`）：C4 为 1，C5 为 100，C8A 为 100，C8B 为 0，C8C 为 `NaN`；若有效样本数为 0，则 `eta_total_mean`、`eta_total_p05` 与 `eta_total_min` 统一置为 `NaN`；
    - 区分物理偏航角均值（`RMS_alpha_comp_dyn_mean`）与 P95 尾部统计（`RMS_alpha_comp_dyn_p95`）；
    - 彻底拆分重用列，设立 4 个独立专用字段：`theta_exceed_time_mean`、`theta_final_exceed_trial_ratio`、`projection_trial_ratio`、`gate_active_time_mean`；
    - C8C 显式声明应用模式为 `ONE_PASS_CAUSAL_GATED_REPLAY`（单次因果门控反事实回放，估计序列来自未补偿基线试验，状态不反馈重新递推），计算实际延迟后门控增益均值（$\gamma_L, \gamma_R$）与真实物理饱和时间比例 `comp_total_sat`，标定有效性标记为 `NOT_APPLICABLE`；
    - 所有字段基于各试验真实计算结果生成，严禁硬编码伪装零值。
-2. **敏感度龙卷风排行榜**：[`output/step3_adaptive_rls/step3c_sensitivity_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_sensitivity_results.csv)
+2. **敏感度龙卷风排行榜**：[`step3_adaptive_rls/step3c_sensitivity_results.csv`](../step3_adaptive_rls/step3c_sensitivity_results.csv)
    - 记录 Test C6 双重排行榜共 **20 行 $\times$ 13 列**（5 因素 $\times$ 2 指标 $\times$ 2 数据集）；
    - 包含单因素物理导数 $S_{\text{physical}}$ 及其带量纲物理单位、范围影响量 $\text{Range\_Impact}$ 及独立排名。
-3. **凸集投影双向安全性表**：[`output/step3_adaptive_rls/step3c_projection_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_projection_results.csv)
+3. **凸集投影双向安全性表**：[`step3_adaptive_rls/step3c_projection_results.csv`](../step3_adaptive_rls/step3c_projection_results.csv)
    - 记录 Test C7 共 **2 行 $\times$ 12 列**；
    - 显式导出低端（25641 次）与高端（20527 次）截断计数，证实双向物理边界均被真实激活。
-4. **C8A 确定性差模工况表**：[`output/step3_adaptive_rls/step3c_c8a_deterministic_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_c8a_deterministic_results.csv)
+4. **C8A 确定性差模工况表**：[`step3_adaptive_rls/step3c_c8a_deterministic_results.csv`](../step3_adaptive_rls/step3c_c8a_deterministic_results.csv)
    - 记录 4 种最劣差模确定性工况共 **4 行 $\times$ 9 列**，作为不可磨灭的确定性证据支撑。
 
 所有生成的 CSV 文件均通过 `readtable` 回读，并执行了行列数匹配及逐字段内存值绝对一致性断言（$|T_{\text{read}} - \text{mem}| < 10^{-12}$），全部 100% 成立。
@@ -213,13 +214,13 @@ xychart-beta
 - **首次超标时刻中位数**：$0.502\text{ s}$；
 - **最后超标时刻中位数**：$2.300\text{ s}$。
 
-#### C8A 4 种最劣差模确定性工况检验 ([`step3c_c8a_deterministic_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_c8a_deterministic_results.csv))
+#### C8A 4 种最劣差模确定性工况检验 ([`step3c_c8a_deterministic_results.csv`](../step3_adaptive_rls/step3c_c8a_deterministic_results.csv))
 | 工况标识 | 估计值 $\hat{\theta}\ (\text{N/count})$ | 前馈偏离 $\max\|\gamma-1\|$ | 虚假力矩 $\text{RMS}\ (\text{Nm})$ | 时滞 $(d_L, d_R)$ | 增益漂移 $(\delta_g^L, \delta_g^R)$ | 状态判定 | 机理说明 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | `Diff_Gain_+2%_-2%` | $-2.4774\times 10^{-4}$ | $2.0393\%$ | $0.1134$ | $(0, 0)\text{ ms}$ | $(+0.02, -0.02)$ | `FAIL` | 电流回采增益差模直接混淆为推力差模 |
 | `Diff_Gain_-2%_+2%` | $+2.4808\times 10^{-4}$ | $2.0422\%$ | $0.1136$ | $(0, 0)\text{ ms}$ | $(-0.02, +0.02)$ | `FAIL` | 反向增益差模产生等幅对称虚假力矩 |
 | `Diff_Delay_1ms_2ms` | $+2.9454\times 10^{-7}$ | $0.0024\%$ | $1.348\times 10^{-4}$ | $(1, 2)\text{ ms}$ | $(0, 0)$ | `PASS` | 通信时滞差模引起的虚假估计极小 |
-| `Diff_Delay_2ms_1ms` | $-1.4994\times 10^{-7}$ | $0.0012\|$ | $6.861\times 10^{-5}$ | $(2, 1)\text{ ms}$ | $(0, 0)$ | `PASS` | 再次印证通信时滞并非参数偏差主要驱动源 |
+| `Diff_Delay_2ms_1ms` | $-1.4994\times 10^{-7}$ | $0.0012\%$ | $6.861\times 10^{-5}$ | $(2, 1)\text{ ms}$ | $(0, 0)$ | `PASS` | 再次印证通信时滞并非参数偏差主要驱动源 |
 
 ### 7.2 C8B 机械偏载对对称系统的混淆 (诊断模式，含匹配对照)
 在完全对称模型（$r=1.00$）上施加 $50\text{ kg}$ 载荷与 $d_{\text{load}} \in [-0.10, +0.10]\text{ m}$ 偏载，并对每次试验同步运行 $d_{\text{load}}=0$ 的匹配对照试验以提取增量偏载偏差：
@@ -233,11 +234,12 @@ xychart-beta
 - **评测状态**：`DIAGNOSTIC_PAYLOAD_CONFOUNDING`。
 
 ### 7.3 C8C 独立迟滞门控应用层评测与 RK4 真实动力学重积分 (GATED_APPLICATION_EVAL_ONLY)
-在不修改底层控制器红线的前提下，仿真评估迟滞确认门控机制（$\theta_{\text{on}} = 1.0\times 10^{-5}, \theta_{\text{off}} = 0.7\times 10^{-5}, N_{\text{confirm}} = 200\text{ ms}$），并**首次调用项目统一动力学核 [`output/common/gantry_dynamics_step_rk4.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/common/gantry_dynamics_step_rk4.m) 对门控后施加电流进行完整物理推进**：
+在不修改底层控制器红线的前提下，仿真评估迟滞确认门控机制（$\theta_{\text{on}} = 1.0\times 10^{-5}, \theta_{\text{off}} = 0.7\times 10^{-5}, N_{\text{confirm}} = 200\text{ ms}$），并**首次调用项目统一动力学核 [`common/gantry_dynamics_step_rk4.m`](../common/gantry_dynamics_step_rk4.m) 对门控后施加电流进行完整物理推进**：
 - **运行模式**：`ONE_PASS_CAUSAL_GATED_REPLAY`（单次因果门控反事实回放）；
 - **门控后执行器真实激活时间比例均值**：$88.69\%$（对比 C8A 原始估计超标 $92.75\%$）；
 - **实际施加在执行器上的门控增益均值**：$(\gamma_L, \gamma_R) = (1.00058, 0.99954)$；
-- **门控后最大前馈偏离度**：$2.7110\%$（高于 C8A 原始值 $1.7599\%$，因门控开通瞬间估计值已累积较大）；
+- **门控后生效增益时序峰值偏离度**（`gamma_applied_timeseries_dev_max`）：$2.0454\%$（评测窗口内实际延迟施加的增益时序峰值）；
+- **门控后终止静态增益偏离度**（`gamma_final_dev_max`）：$1.7599\%$（评测窗口终点静态截断值，与 C8A 终点标定偏离度持平）；两者分属时序动态峰值与终点静态截断两个不同统计口径，不能直接做高低断言；
 - **门控后虚假诱导偏航力矩最大 RMS**：$0.09680\text{ Nm}$；
 - **门控后真实物理偏航角 RMS (RK4 重积分)**：均值 $1.5820\times 10^{-4}\text{ rad}$，P95 为 $1.6446\times 10^{-4}\text{ rad}$（对比基线 $1.5712\times 10^{-4}\text{ rad}$）；
 - **物理偏角绝对改善度**：**$\eta_{\alpha,\text{abs}} = -0.685\%$（轻微退化）**；
@@ -247,9 +249,9 @@ xychart-beta
 
 > [!CAUTION]
 > **C8C 关键物理发现与结论收紧**：
-> 1. **应用层门控无法解决物理失效**：差模电流漂移（幅值达 $2.48\times 10^{-4} > 1.0\times 10^{-5}$）持续存在，门控虽能推迟 $200\text{ ms}$ 激活，但一旦越界开启，依然持续作用达 $88.69\%$ 的时间；
-> 2. **门控阶跃切换引入额外动态扰动**：迟滞门控在跨越阈值时造成前馈增益突跳，导致真实物理偏航角 RMS 由 $1.5712\times 10^{-4}\text{ rad}$ 略微增大至 $1.5820\times 10^{-4}\text{ rad}$（改善度为 $-0.69\%$）；
-> 3. **严禁宣告“门控通过”**：必须明确定性为 `GATED_APPLICATION_EVAL_ONLY`，应用层门控未解决问题，不能作为 Step 3 关闭的依据。
+> 1. **本次门控配置未解决底层物理失效**：差模电流漂移（幅值达 $2.48\times 10^{-4} > 1.0\times 10^{-5}$）持续存在，门控虽能推迟 $200\text{ ms}$ 激活，但一旦越界开启，依然持续作用达 $88.69\%$ 的时间；
+> 2. **因果归因严谨定性**：在本次固定阈值、200 ms 确认门控及给定扰动分布下，观察到偏航角 RMS 轻微增加（由 $1.5712\times 10^{-4}\text{ rad}$ 略增至 $1.5820\times 10^{-4}\text{ rad}$，改善度为 $-0.69\%$）。由于尚未开展平滑门控与无门控时变补偿的匹配消融试验，暂不能将退化唯一归因于门控切换；
+> 3. **严禁宣告“门控通过”**：必须明确定性为 `GATED_APPLICATION_EVAL_ONLY`，本次门控配置未解决问题，不能作为 Step 3 关闭的依据。
 
 ---
 
@@ -259,7 +261,7 @@ xychart-beta
 > ### 最终技术验收结论
 > **Step 3C-2 已执行成功，但不能验收关闭 Step 3，Step 3 严格保持 OPEN**。
 > - **阻断项 1 (C8A 原始估计器)**：评测窗口内超标时间均比为 $92.75\%$（门槛 $5.0\%$），程序化判定为 `RAW_ESTIMATOR_FAIL`；
-> - **阻断项 2 (C8C 真实动态)**：RK4 重积分显示门控后物理偏角改善度为 $-0.69\%$，最大增益偏离扩大至 $2.71\%$，应用层门控未解决虚假补偿问题；
+> - **阻断项 2 (C8C 真实动态)**：RK4 重积分显示门控后物理偏角改善度为 $-0.69\%$，生效时序峰值增益偏离达 $2.05\%$，本次门控配置未解决虚假补偿问题；
 > - **关闭准入前提**：只有当 C8A 原始估计器通过 $5\%$ 超标时间门槛，且应用层控制方案在真实物理动态指标上完成有效改善证明后，才允许重新讨论 Step 3 关闭事宜。
 
 ### 下一步技术演进建议
