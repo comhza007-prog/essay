@@ -125,29 +125,99 @@ function res = analyze_step3c_trial(base_data, cfg)
     T_alpha_base = -0.5 * Le * (Kf_L * iL_base_applied + Kf_R * iR_base_applied);
     T_alpha_comp = -0.5 * Le * (Kf_L * iL_comp_applied + Kf_R * iR_comp_applied);
     
-    % 标称目标期望偏航力矩 (名义无偏差期望值)
+    % 7.3.1 延迟后名义目标偏航力矩 (用于评估推力失配残留误差)
     T_alpha_nom  = -0.5 * Le * Kf_mean * (iL_base_delayed + iR_base_delayed);
-    
     e_T_base = T_alpha_base - T_alpha_nom;
     e_T_comp = T_alpha_comp - T_alpha_nom;
 
+    % 7.3.2 控制器未延迟意图目标偏航力矩 (用于评估包含时滞在内的总扰动力矩)
+    T_nom_intended = -0.5 * Le * Kf_mean * (iL_base_cmd + iR_base_cmd);
+    e_total_base = T_alpha_base - T_nom_intended;
+    e_total_comp = T_alpha_comp - T_nom_intended;
+
     % 8. 窗口统计 (严格限制在有效评测窗口 [t_eval_start, t_eval_end])
-    mask_eval = (t >= pert_data.t_eval_start & t <= pert_data.t_eval_end);
+    mask_eval  = (t >= pert_data.t_eval_start & t <= pert_data.t_eval_end);
+    mask_dwell = (t >= 3.0 & t <= 4.0);
     N_eval = sum(mask_eval);
 
+    % 8.1 推力失配残留误差 RMS 与抑制比
     rms_base = sqrt(mean(e_T_base(mask_eval).^2));
     rms_comp = sqrt(mean(e_T_comp(mask_eval).^2));
-
     if rms_base < 1.0e-12
-        eta_sat = NaN;
+        eta_kf_residual = NaN;
     else
-        eta_sat = (1.0 - rms_comp / rms_base) * 100.0;
+        eta_kf_residual = (1.0 - rms_comp / rms_base) * 100.0;
+    end
+    eta_sat = eta_kf_residual; % 保持兼容别名
+
+    % 8.2 相对未延迟意图指令的总扰动力矩 RMS 与抑制比
+    rms_total_base = sqrt(mean(e_total_base(mask_eval).^2));
+    rms_total_comp = sqrt(mean(e_total_comp(mask_eval).^2));
+    if rms_total_base < 1.0e-12
+        eta_total = NaN;
+    else
+        eta_total = (1.0 - rms_total_comp / rms_total_base) * 100.0;
     end
 
-    % 8.1 准静态偏航角推算 (alpha_ss = e_T / K_alpha)
+    % 8.3 准静态偏航角推算 (alpha_ss = e_T / K_alpha)
     K_alpha = base_data.plant.K_alpha;
     alpha_ss_base = rms_base / K_alpha;
     alpha_ss_comp = rms_comp / K_alpha;
+
+    % 8.4 执行时滞下的真实物理动力学响应 RK4 重积分与动态角偏差
+    has_act_delay = (dL_act > 0 || dR_act > 0);
+    alpha_no_delay = base_data.alpha;
+    alpha_base_dyn = pert_data.alpha_true;
+    if has_act_delay
+        alpha_comp_dyn = zeros(N, 1);
+        x_c = zeros(4, 1);
+        for k = 1:N
+            [x_c_next, ~] = gantry_dynamics_step_rk4(...
+                x_c, iL_comp_applied(k), iR_comp_applied(k), ...
+                base_data.mech, base_data.plant, ...
+                0.0, 0.0, 0.0, dt, Kf_L, Kf_R);
+            alpha_comp_dyn(k) = x_c(2);
+            x_c = x_c_next;
+        end
+        dalpha_base = alpha_base_dyn - alpha_no_delay;
+        dalpha_comp = alpha_comp_dyn - alpha_no_delay;
+        rms_dalpha_base = sqrt(mean(dalpha_base(mask_eval).^2));
+        rms_dalpha_comp = sqrt(mean(dalpha_comp(mask_eval).^2));
+        rms_alpha_base_dyn = sqrt(mean(alpha_base_dyn(mask_eval).^2));
+        rms_alpha_comp_dyn = sqrt(mean(alpha_comp_dyn(mask_eval).^2));
+    else
+        rms_dalpha_base = 0.0;
+        rms_dalpha_comp = 0.0;
+        rms_alpha_base_dyn = sqrt(mean(alpha_base_dyn(mask_eval).^2));
+        rms_alpha_comp_dyn = rms_alpha_base_dyn;
+    end
+
+    % 8.5 传感器滤波衰减量量化 (针对位置噪声 C3)
+    if isfield(pert_data, 'v_yL') && (pert_data.cfg.sigma_y_L > 0 || pert_data.cfg.sigma_y_R > 0)
+        e_alpha_raw = (pert_data.v_yR - pert_data.v_yL) / Le;
+        fc = 10.0; wc = 2.0 * pi * fc;
+        poly_den = [1.0, 2.61312592975275 * wc, 3.41421356237310 * (wc^2), ...
+                    2.61312592975275 * (wc^3), wc^4];
+        sys_w0_d = c2d(tf(wc^4, poly_den), dt, 'tustin');
+        [num_w0, den_a] = tfdata(sys_w0_d, 'v');
+        alpha_raw_clean = (pert_data.yR_q - pert_data.yL_q) / Le;
+        alpha_f_clean   = filter(num_w0, den_a, alpha_raw_clean);
+        e_alpha_filt    = reg.alpha_f - alpha_f_clean;
+        
+        rms_noise_raw  = sqrt(mean(e_alpha_raw(mask_eval).^2));
+        rms_noise_filt = sqrt(mean(e_alpha_filt(mask_eval).^2));
+        if rms_noise_filt > 1e-12
+            svf_atten_dB = 20.0 * log10(rms_noise_raw / rms_noise_filt);
+        else
+            svf_atten_dB = NaN;
+        end
+    else
+        svf_atten_dB = NaN;
+    end
+
+    % 8.6 PE 门控误触发与激活比例统计
+    pe_false_alarm_rate = mean(pe_mask(mask_dwell));
+    pe_active_ratio     = mean(pe_mask(mask_eval));
 
     % 9. 电流饱和率统计 (全时段统计)
     base_sat_mask_L = (abs(iL_base_applied) >= Imax - 1e-6);
@@ -169,7 +239,6 @@ function res = analyze_step3c_trial(base_data, cfg)
     sample_clip_ratio = unproj_clipped_count / N_eval;
     has_any_clip = (unproj_clipped_count > 0);
     unproj_max_peak = max(abs(unproj_eval));
-    pe_active_ratio = mean(pe_mask(mask_eval));
 
     % 11. 打包单次试验输出
     res = struct();
@@ -191,8 +260,21 @@ function res = analyze_step3c_trial(base_data, cfg)
     res.rms_base            = rms_base;
     res.rms_comp            = rms_comp;
     res.eta_sat             = eta_sat;
+    res.eta_kf_residual     = eta_kf_residual;
+    res.rms_total_base      = rms_total_base;
+    res.rms_total_comp      = rms_total_comp;
+    res.eta_total           = eta_total;
+
     res.alpha_ss_base       = alpha_ss_base;
     res.alpha_ss_comp       = alpha_ss_comp;
+    res.rms_dalpha_base     = rms_dalpha_base;
+    res.rms_dalpha_comp     = rms_dalpha_comp;
+    res.rms_alpha_base_dyn  = rms_alpha_base_dyn;
+    res.rms_alpha_comp_dyn  = rms_alpha_comp_dyn;
+
+    res.svf_atten_dB        = svf_atten_dB;
+    res.pe_false_alarm_rate = pe_false_alarm_rate;
+    res.pe_active_ratio     = pe_active_ratio;
 
     res.base_sat_ratio_L    = base_sat_ratio_L;
     res.base_sat_ratio_R    = base_sat_ratio_R;

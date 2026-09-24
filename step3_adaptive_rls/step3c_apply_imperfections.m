@@ -262,6 +262,10 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
     pert_data.alpha_ddot_hist = alpha_ddot_hist;
     pert_data.T_fric_hist     = T_fric_hist;
 
+    pert_data.yL_q            = yL_q;
+    pert_data.yR_q            = yR_q;
+    pert_data.v_yL            = v_yL;
+    pert_data.v_yR            = v_yR;
     pert_data.yL_meas         = yL_meas;
     pert_data.yR_meas         = yR_meas;
 

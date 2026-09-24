@@ -1,5 +1,5 @@
 =========================================================================
-   STEP 3C-1: 真实非理想扰动开环鲁棒性基准测试 (Tests C1 ~ C3)            
+   STEP 3C-1: 真实非理想扰动开环鲁棒性基准测试 (Tests C1 ~ C3 修订版)     
 =========================================================================
 
 >>> 执行严格红线闭环控制器隔离检查...
@@ -15,88 +15,119 @@
 =========================================================================
 
 --- [Test C0] 理想无扰动基准对照 ---
-  基线 RMS: 1.0009e+00 Nm | 补偿后 RMS: 4.7846e-04 Nm | eta_sat: 99.952%
-  theta_hat: -2.1885144e-03 | Delta_Kf_True: -2.1875000e-03 | 误差: 1.0144e-06
+  基线 RMS: 1.0009e+00 Nm | 补偿后 RMS: 4.7846e-04 Nm | eta_kf: 99.952% | eta_tot: 99.952%
+  theta_hat: -2.1885144e-03 | 误差: 1.0144e-06 | 状态: [PASS]
 
---- [Test C1] 电流三层误差与回采漂移评测 ---
-  [C1.1] delta_g = -3.00% -> theta_hat = -2.0326836e-03 (误差: 1.55e-04) | eta_sat =  92.74% [PASS]
-  [C1.1] delta_g = -1.00% -> theta_hat = -2.1370925e-03 (误差: 5.04e-05) | eta_sat =  97.63% [PASS]
-  [C1.1] delta_g = +1.00% -> theta_hat = -2.2394248e-03 (误差: 5.19e-05) | eta_sat =  97.55% [PASS]
-  [C1.1] delta_g = +3.00% -> theta_hat = -2.3397415e-03 (误差: 1.52e-04) | eta_sat =  92.79% [PASS]
-  [C1.2] i_bias = -30.0 ct -> theta_hat = -2.1856629e-03 (误差: 1.84e-06) | eta_sat =  99.91% [PASS]
-  [C1.2] i_bias = -15.0 ct -> theta_hat = -2.1868551e-03 (误差: 6.45e-07) | eta_sat =  99.97% [PASS]
-  [C1.2] i_bias = +15.0 ct -> theta_hat = -2.1906398e-03 (误差: 3.14e-06) | eta_sat =  99.85% [PASS]
-  [C1.2] i_bias = +30.0 ct -> theta_hat = -2.1932308e-03 (误差: 5.73e-06) | eta_sat =  99.73% [PASS]
-  [C1.3] 电流高斯白噪声 Monte Carlo 评测 (sigma_i = 10 ct, N = 30)...
-         均值: -2.1886774e-03 | 中位数: -2.1888899e-03 | P95: -2.1866569e-03 | RMSE: 1.83e-06
-         eta_sat_mean:  99.93% | eta_sat_p05:  99.85% [PASS]
-  [C1.4] 复合电流非理想扰动 Monte Carlo 评测 (delta_g=+2%, bias=+20ct, sig=10ct, N = 30)...
-         均值: -2.2928729e-03 | 中位数: -2.2930872e-03 | P95: -2.2908754e-03 | RMSE: 1.05e-04
-         eta_sat_mean:  95.02% | eta_sat_p05:  94.93% [PASS]
+--- [Test C1.1] 左通道单轴增益漂移扫描 (-3%, -1%, +1%, +3%) ---
+  [C1.1_Left] dg_L = -3.00% -> theta_hat = -2.0326836e-03 (误差: 1.55e-04) | eta_kf =  92.74% [PASS]
+  [C1.1_Left] dg_L = -1.00% -> theta_hat = -2.1370925e-03 (误差: 5.04e-05) | eta_kf =  97.63% [PASS]
+  [C1.1_Left] dg_L = +1.00% -> theta_hat = -2.2394248e-03 (误差: 5.19e-05) | eta_kf =  97.55% [PASS]
+  [C1.1_Left] dg_L = +3.00% -> theta_hat = -2.3397415e-03 (误差: 1.52e-04) | eta_kf =  92.79% [PASS]
 
---- [Test C2] CAN 通信传输延迟评测 (执行时滞触发 RK4 因果重积分) ---
-  [C2.1] d_act=1ms (Sym)            -> theta_hat: -2.1885110e-03 (误差: 1.01e-06) | eta_sat:  99.95% [PASS]
-  [C2.2] d_act=2ms (Sym)            -> theta_hat: -2.1885076e-03 (误差: 1.01e-06) | eta_sat:  99.95% [PASS]
-  [C2.3] d_act=3ms (Sym)            -> theta_hat: -2.1885042e-03 (误差: 1.00e-06) | eta_sat:  99.95% [PASS]
-  [C2.4] dL=1ms, dR=2ms             -> theta_hat: -2.1884885e-03 (误差: 9.88e-07) | eta_sat:  99.95% [PASS]
-  [C2.5] dL=2ms, dR=1ms             -> theta_hat: -2.1890574e-03 (误差: 1.56e-06) | eta_sat:  99.93% [PASS]
-  [C2.6] d_meas=2ms (Sym)           -> theta_hat: -2.1882218e-03 (误差: 7.22e-07) | eta_sat:  99.97% [PASS]
-  [C2.7] dL_meas=1ms, dR_meas=2ms   -> theta_hat: -2.1880513e-03 (误差: 5.51e-07) | eta_sat:  99.97% [PASS]
+--- [Test C1.1] 双轴完备增益组合评测 (a = 0.02, 共 8 种组合) ---
+  [C1.1_Multi] dg_L=+0.02;dg_R=0.00                 -> theta_hat: -2.2898313e-03 | eta_kf:  95.16% [PASS]
+  [C1.1_Multi] dg_L=-0.02;dg_R=0.00                 -> theta_hat: -2.0851516e-03 | eta_kf:  95.19% [PASS]
+  [C1.1_Multi] dg_L=0.00;dg_R=+0.02                 -> theta_hat: -2.0444763e-03 | eta_kf:  93.29% [PASS]
+  [C1.1_Multi] dg_L=0.00;dg_R=-0.02                 -> theta_hat: -2.3354459e-03 | eta_kf:  93.00% [PASS]
+  [C1.1_Multi] dg_L=+0.02;dg_R=+0.02                -> theta_hat: -2.1462194e-03 | eta_kf:  98.06% [PASS]
+  [C1.1_Multi] dg_L=-0.02;dg_R=-0.02                -> theta_hat: -2.2325355e-03 | eta_kf:  97.87% [PASS]
+  [C1.1_Multi] dg_L=+0.02;dg_R=-0.02                -> theta_hat: -2.4362990e-03 | eta_kf:  88.19% [DEGRADED]
+  [C1.1_Multi] dg_L=-0.02;dg_R=+0.02                -> theta_hat: -1.9406994e-03 | eta_kf:  88.45% [DEGRADED]
 
---- [Test C3] 高频传感测量高斯随机噪声评测 (Monte Carlo N = 30) ---
-  [C3.1] sigma_y=1.0um    -> 均值: -2.1893512e-03 | 中位数: -2.1892522e-03 | RMSE: 2.03e-06 | eta_sat_mean:  99.91% [PASS]
-  [C3.2] sigma_y=2.0um    -> 均值: -2.1916210e-03 | 中位数: -2.1911146e-03 | RMSE: 5.17e-06 | eta_sat_mean:  99.79% [PASS]
-  [C3.3] sigma_y=5.0um    -> 均值: -2.2015221e-03 | 中位数: -2.2019180e-03 | RMSE: 2.07e-05 | eta_sat_mean:  99.17% [PASS]
+--- [Test C1.2] 电流霍尔零漂扫描 (-30, -15, +15, +30 counts) ---
+  [C1.2] i_bias = -30.0 ct -> theta_hat = -2.1856629e-03 (误差: 1.84e-06) | eta_kf =  99.91% [PASS]
+  [C1.2] i_bias = -15.0 ct -> theta_hat = -2.1868551e-03 (误差: 6.45e-07) | eta_kf =  99.97% [PASS]
+  [C1.2] i_bias = +15.0 ct -> theta_hat = -2.1906398e-03 (误差: 3.14e-06) | eta_kf =  99.85% [PASS]
+  [C1.2] i_bias = +30.0 ct -> theta_hat = -2.1932308e-03 (误差: 5.73e-06) | eta_kf =  99.73% [PASS]
 
->>> 数据集 r070 (Delta_Kf < 0) 评测通过！
+--- [Test C1.3] 电流高斯白噪声 Monte Carlo 评测 (sigma_i = 10 ct, N = 30) ---
+  [C1.3] 均值: -2.1886774e-03 | 中位数: -2.1888899e-03 | AbsErr_P95: 3.12e-06 | RMSE: 1.83e-06
+         eta_kf_mean:  99.93% | eta_kf_p05:  99.85% | 无效试验数: 0 [PASS]
+
+--- [Test C1.4] 复合电流非理想扰动 Monte Carlo 评测 (dg=+2%, bias=+20ct, sig=10ct) ---
+  [C1.4] 均值: -2.2928729e-03 | 中位数: -2.2930872e-03 | AbsErr_P95: 1.07e-04 | RMSE: 1.05e-04
+         eta_kf_mean:  95.02% | eta_kf_p05:  94.93% | 无效试验数: 0 [PASS]
+
+--- [Test C2] CAN 通信延迟评测 (执行时滞触发 RK4 因果动力学重积分) ---
+  [C2.1] d_act_L=1ms;d_act_R=1ms      -> eta_kf:  99.95% | eta_tot:  99.70% | dalpha_RMS: 5.03e-04 rad [PASS]
+  [C2.2] d_act_L=2ms;d_act_R=2ms      -> eta_kf:  99.95% | eta_tot:  99.40% | dalpha_RMS: 5.03e-04 rad [PASS]
+  [C2.3] d_act_L=3ms;d_act_R=3ms      -> eta_kf:  99.95% | eta_tot:  99.11% | dalpha_RMS: 5.02e-04 rad [PASS]
+  [C2.4] d_act_L=1ms;d_act_R=2ms      -> eta_kf:  99.95% | eta_tot:  97.68% | dalpha_RMS: 5.01e-04 rad [PASS]
+  [C2.5] d_act_L=2ms;d_act_R=1ms      -> eta_kf:  99.93% | eta_tot:  97.80% | dalpha_RMS: 5.05e-04 rad [PASS]
+  [C2.6] d_meas_L=2ms;d_meas_R=2ms    -> eta_kf:  99.97% | eta_tot:  99.97% | dalpha_RMS: 0.00e+00 rad [PASS]
+  [C2.7] d_meas_L=1ms;d_meas_R=2ms    -> eta_kf:  99.97% | eta_tot:  99.97% | dalpha_RMS: 0.00e+00 rad [PASS]
+
+--- [Test C3] 高频传感测量高斯白噪声评测 (Monte Carlo N = 30) ---
+  [C3.1] sigma_y=1.0um;quant=1.0um    -> AbsErr_P95: 3.27e-06 | eta_kf_p05:  99.85% | SVF衰减: 16.8 dB | PE_FAR: 0.0e+00 [PASS]
+  [C3.2] sigma_y=2.0um;quant=1.0um    -> AbsErr_P95: 9.46e-06 | eta_kf_p05:  99.55% | SVF衰减: 16.8 dB | PE_FAR: 0.0e+00 [PASS]
+  [C3.3] sigma_y=5.0um;quant=1.0um    -> AbsErr_P95: 3.94e-05 | eta_kf_p05:  98.14% | SVF衰减: 16.8 dB | PE_FAR: 0.0e+00 [PASS]
+
+>>> 数据集 r070 (Delta_Kf < 0) 全部工况测试完成！
 
 =========================================================================
 >>> 开始评测数据集 [2/2]: r130 (Delta_Kf > 0) (Delta_Kf_True = +1.6168478e-03 N/count)
 =========================================================================
 
 --- [Test C0] 理想无扰动基准对照 ---
-  基线 RMS: 7.3980e-01 Nm | 补偿后 RMS: 4.9528e-04 Nm | eta_sat: 99.933%
-  theta_hat: +1.6179108e-03 | Delta_Kf_True: +1.6168478e-03 | 误差: 1.0630e-06
+  基线 RMS: 7.3980e-01 Nm | 补偿后 RMS: 4.9528e-04 Nm | eta_kf: 99.933% | eta_tot: 99.933%
+  theta_hat: +1.6179108e-03 | 误差: 1.0630e-06 | 状态: [PASS]
 
---- [Test C1] 电流三层误差与回采漂移评测 ---
-  [C1.1] delta_g = -3.00% -> theta_hat = +1.8314618e-03 (误差: 2.15e-04) | eta_sat =  86.41% [DEGRADED]
-  [C1.1] delta_g = -1.00% -> theta_hat = +1.6885078e-03 (误差: 7.17e-05) | eta_sat =  95.48% [PASS]
-  [C1.1] delta_g = +1.00% -> theta_hat = +1.5480159e-03 (误差: 6.88e-05) | eta_sat =  95.67% [PASS]
-  [C1.1] delta_g = +3.00% -> theta_hat = +1.4102911e-03 (误差: 2.07e-04) | eta_sat =  87.05% [DEGRADED]
-  [C1.2] i_bias = -30.0 ct -> theta_hat = +1.6218212e-03 (误差: 4.97e-06) | eta_sat =  99.69% [PASS]
-  [C1.2] i_bias = -15.0 ct -> theta_hat = +1.6201866e-03 (误差: 3.34e-06) | eta_sat =  99.79% [PASS]
-  [C1.2] i_bias = +15.0 ct -> theta_hat = +1.6149948e-03 (误差: 1.85e-06) | eta_sat =  99.88% [PASS]
-  [C1.2] i_bias = +30.0 ct -> theta_hat = +1.6114399e-03 (误差: 5.41e-06) | eta_sat =  99.66% [PASS]
-  [C1.3] 电流高斯白噪声 Monte Carlo 评测 (sigma_i = 10 ct, N = 30)...
-         均值: +1.6177806e-03 | 中位数: +1.6178025e-03 | P95: +1.6195952e-03 | RMSE: 1.62e-06
-         eta_sat_mean:  99.92% | eta_sat_p05:  99.83% [PASS]
-  [C1.4] 复合电流非理想扰动 Monte Carlo 评测 (delta_g=+2%, bias=+20ct, sig=10ct, N = 30)...
-         均值: +1.4747330e-03 | 中位数: +1.4747385e-03 | P95: +1.4765508e-03 | RMSE: 1.42e-04
-         eta_sat_mean:  91.08% | eta_sat_p05:  90.94% [PASS]
+--- [Test C1.1] 左通道单轴增益漂移扫描 (-3%, -1%, +1%, +3%) ---
+  [C1.1_Left] dg_L = -3.00% -> theta_hat = +1.8314618e-03 (误差: 2.15e-04) | eta_kf =  86.41% [DEGRADED]
+  [C1.1_Left] dg_L = -1.00% -> theta_hat = +1.6885078e-03 (误差: 7.17e-05) | eta_kf =  95.48% [PASS]
+  [C1.1_Left] dg_L = +1.00% -> theta_hat = +1.5480159e-03 (误差: 6.88e-05) | eta_kf =  95.67% [PASS]
+  [C1.1_Left] dg_L = +3.00% -> theta_hat = +1.4102911e-03 (误差: 2.07e-04) | eta_kf =  87.05% [DEGRADED]
 
---- [Test C2] CAN 通信传输延迟评测 (执行时滞触发 RK4 因果重积分) ---
-  [C2.1] d_act=1ms (Sym)            -> theta_hat: +1.6179051e-03 (误差: 1.06e-06) | eta_sat:  99.93% [PASS]
-  [C2.2] d_act=2ms (Sym)            -> theta_hat: +1.6178994e-03 (误差: 1.05e-06) | eta_sat:  99.93% [PASS]
-  [C2.3] d_act=3ms (Sym)            -> theta_hat: +1.6178936e-03 (误差: 1.05e-06) | eta_sat:  99.93% [PASS]
-  [C2.4] dL=1ms, dR=2ms             -> theta_hat: +1.6180729e-03 (误差: 1.23e-06) | eta_sat:  99.92% [PASS]
-  [C2.5] dL=2ms, dR=1ms             -> theta_hat: +1.6176707e-03 (误差: 8.23e-07) | eta_sat:  99.95% [PASS]
-  [C2.6] d_meas=2ms (Sym)           -> theta_hat: +1.6175719e-03 (误差: 7.24e-07) | eta_sat:  99.95% [PASS]
-  [C2.7] dL_meas=1ms, dR_meas=2ms   -> theta_hat: +1.6180199e-03 (误差: 1.17e-06) | eta_sat:  99.93% [PASS]
+--- [Test C1.1] 双轴完备增益组合评测 (a = 0.02, 共 8 种组合) ---
+  [C1.1_Multi] dg_L=+0.02;dg_R=0.00                 -> theta_hat: +1.4788127e-03 | eta_kf:  91.33% [PASS]
+  [C1.1_Multi] dg_L=-0.02;dg_R=0.00                 -> theta_hat: +1.7598175e-03 | eta_kf:  90.97% [PASS]
+  [C1.1_Multi] dg_L=0.00;dg_R=+0.02                 -> theta_hat: +1.7243561e-03 | eta_kf:  93.21% [PASS]
+  [C1.1_Multi] dg_L=0.00;dg_R=-0.02                 -> theta_hat: +1.5093271e-03 | eta_kf:  93.24% [PASS]
+  [C1.1_Multi] dg_L=+0.02;dg_R=+0.02                -> theta_hat: +1.5855731e-03 | eta_kf:  98.03% [PASS]
+  [C1.1_Multi] dg_L=-0.02;dg_R=-0.02                -> theta_hat: +1.6515683e-03 | eta_kf:  97.81% [PASS]
+  [C1.1_Multi] dg_L=+0.02;dg_R=-0.02                -> theta_hat: +1.3699294e-03 | eta_kf:  84.53% [DEGRADED]
+  [C1.1_Multi] dg_L=-0.02;dg_R=+0.02                -> theta_hat: +1.8465000e-03 | eta_kf:  85.46% [DEGRADED]
 
---- [Test C3] 高频传感测量高斯随机噪声评测 (Monte Carlo N = 30) ---
-  [C3.1] sigma_y=1.0um    -> 均值: +1.6185887e-03 | 中位数: +1.6186729e-03 | RMSE: 1.94e-06 | eta_sat_mean:  99.89% [PASS]
-  [C3.2] sigma_y=2.0um    -> 均值: +1.6204235e-03 | 中位数: +1.6211368e-03 | RMSE: 4.79e-06 | eta_sat_mean:  99.75% [PASS]
-  [C3.3] sigma_y=5.0um    -> 均值: +1.6273923e-03 | 中位数: +1.6268933e-03 | RMSE: 1.89e-05 | eta_sat_mean:  99.03% [PASS]
+--- [Test C1.2] 电流霍尔零漂扫描 (-30, -15, +15, +30 counts) ---
+  [C1.2] i_bias = -30.0 ct -> theta_hat = +1.6218212e-03 (误差: 4.97e-06) | eta_kf =  99.69% [PASS]
+  [C1.2] i_bias = -15.0 ct -> theta_hat = +1.6201866e-03 (误差: 3.34e-06) | eta_kf =  99.79% [PASS]
+  [C1.2] i_bias = +15.0 ct -> theta_hat = +1.6149948e-03 (误差: 1.85e-06) | eta_kf =  99.88% [PASS]
+  [C1.2] i_bias = +30.0 ct -> theta_hat = +1.6114399e-03 (误差: 5.41e-06) | eta_kf =  99.66% [PASS]
 
->>> 数据集 r130 (Delta_Kf > 0) 评测通过！
+--- [Test C1.3] 电流高斯白噪声 Monte Carlo 评测 (sigma_i = 10 ct, N = 30) ---
+  [C1.3] 均值: +1.6177806e-03 | 中位数: +1.6178025e-03 | AbsErr_P95: 2.75e-06 | RMSE: 1.62e-06
+         eta_kf_mean:  99.92% | eta_kf_p05:  99.83% | 无效试验数: 0 [PASS]
 
->>> Step 3C-1 结构化评测结果已成功导出至: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part1_results.csv
-    总计记录数: 42 条数据行，每行 38 列
+--- [Test C1.4] 复合电流非理想扰动 Monte Carlo 评测 (dg=+2%, bias=+20ct, sig=10ct) ---
+  [C1.4] 均值: +1.4747330e-03 | 中位数: +1.4747385e-03 | AbsErr_P95: 1.44e-04 | RMSE: 1.42e-04
+         eta_kf_mean:  91.08% | eta_kf_p05:  90.94% | 无效试验数: 0 [PASS]
+
+--- [Test C2] CAN 通信延迟评测 (执行时滞触发 RK4 因果动力学重积分) ---
+  [C2.1] d_act_L=1ms;d_act_R=1ms      -> eta_kf:  99.93% | eta_tot:  99.60% | dalpha_RMS: 3.71e-04 rad [PASS]
+  [C2.2] d_act_L=2ms;d_act_R=2ms      -> eta_kf:  99.93% | eta_tot:  99.21% | dalpha_RMS: 3.71e-04 rad [PASS]
+  [C2.3] d_act_L=3ms;d_act_R=3ms      -> eta_kf:  99.93% | eta_tot:  98.81% | dalpha_RMS: 3.71e-04 rad [PASS]
+  [C2.4] d_act_L=1ms;d_act_R=2ms      -> eta_kf:  99.92% | eta_tot:  96.82% | dalpha_RMS: 3.73e-04 rad [PASS]
+  [C2.5] d_act_L=2ms;d_act_R=1ms      -> eta_kf:  99.95% | eta_tot:  97.07% | dalpha_RMS: 3.69e-04 rad [PASS]
+  [C2.6] d_meas_L=2ms;d_meas_R=2ms    -> eta_kf:  99.95% | eta_tot:  99.95% | dalpha_RMS: 0.00e+00 rad [PASS]
+  [C2.7] d_meas_L=1ms;d_meas_R=2ms    -> eta_kf:  99.93% | eta_tot:  99.93% | dalpha_RMS: 0.00e+00 rad [PASS]
+
+--- [Test C3] 高频传感测量高斯白噪声评测 (Monte Carlo N = 30) ---
+  [C3.1] sigma_y=1.0um;quant=1.0um    -> AbsErr_P95: 3.23e-06 | eta_kf_p05:  99.80% | SVF衰减: 16.8 dB | PE_FAR: 0.0e+00 [PASS]
+  [C3.2] sigma_y=2.0um;quant=1.0um    -> AbsErr_P95: 9.85e-06 | eta_kf_p05:  99.38% | SVF衰减: 16.8 dB | PE_FAR: 0.0e+00 [PASS]
+  [C3.3] sigma_y=5.0um;quant=1.0um    -> AbsErr_P95: 4.08e-05 | eta_kf_p05:  97.43% | SVF衰减: 16.8 dB | PE_FAR: 0.0e+00 [PASS]
+
+>>> 数据集 r130 (Delta_Kf > 0) 全部工况测试完成！
+
+>>> Step 3C-1 结构化评测结果已通过 writetable 成功导出至: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part1_results.csv
+>>> 执行严格 CSV 回读结构性与数值一致性断言校验...
+    [OK] CSV 维度严格断言通过: 58 行 x 40 列
+    [OK] 抽查通过: r070 复合扰动行字段及数值与内存完全一致 (eta_kf = 95.02%)
+    [OK] 抽查通过: r130 异步时滞行字段及数值与内存完全一致 (eta_kf = 99.92%, eta_tot = 96.82%)
 =========================================================================
-   STEP 3C-1 物理扰动开环基准评测全部完成！                                
-   - Test C1 (三层电流误差 & 漂移): +/-1% 增益漂移、零偏及噪声全部 PASS (>=91%);
-     +/-3% 增益漂移在 r=1.30 下定界出性能降额区间 (86.4%~87.1%, 标记 DEGRADED)
-   - Test C2 (CAN 传输与异步时滞): RK4 因果重积分全部完成，eta_sat >= 99.9% (PASS)
-   - Test C3 (高频传感位置噪声): SVF 与 PE 门控有效滤波，eta_sat >= 99.0% (PASS)
+   STEP 3C-1 物理扰动开环基准评测全部完成且严格核销！                    
+   - Test C1: 增益漂移单轴及双轴 8 种组合全覆盖，定界出硬件容差范围；     
+   - Test C2: 力矩与动态角严格解耦，给出真实动力学跟踪偏差 RMS；           
+   - Test C3: 严格计算 SVF 滤波衰减 dB 与 PE 门控误触发/漏触发率；        
+   - 结构表: table+writetable 导出并回读校验，无任何字段错位 (58行 x 40列) 
    - Test C4 ~ C8 保持严格冻结状态，等待专项审查！
 =========================================================================
