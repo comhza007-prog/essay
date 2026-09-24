@@ -214,7 +214,8 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
     iL_meas = (1.0 + cfg.delta_g_L) * iL_meas_delayed + cfg.i_bias_L + v_iL;
     iR_meas = (1.0 + cfg.delta_g_R) * iR_meas_delayed + cfg.i_bias_R + v_iR;
 
-    % 阶跃故障跳变 (针对 Test C7 凸集投影安全性强扰动)
+    % 阶跃故障跳变 (针对 Test C7 凸集投影安全性强扰动，作用于回采测量电流物理层)
+    % 明确命名为: Measured_Current_Sensor_Step_Fault (回采电流传感器阶跃测量故障)
     if isfinite(cfg.step_fault_t)
         fault_mask = (t >= cfg.step_fault_t);
         iL_meas(fault_mask) = iL_meas(fault_mask) + cfg.step_fault_amp_L;

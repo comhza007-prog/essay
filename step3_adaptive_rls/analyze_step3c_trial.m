@@ -164,7 +164,8 @@ function res = analyze_step3c_trial(base_data, cfg)
     alpha_ss_base = rms_base / K_alpha;
     alpha_ss_comp = rms_comp / K_alpha;
 
-    % 8.4 执行时滞与偏载耦合下的真实物理动力学响应 RK4 重积分与动态角偏差
+    % 8.4 四条匹配参考支路因果重积分架构 (base_no_delay, base_delayed, comp_no_delay, comp_delayed)
+    % 确保所有支路严格采用相同的 delta_m, d_load, delta_fric 参数
     delta_m_val = 0.0;
     d_load_val = 0.0;
     delta_fric_val = 0.0;
@@ -172,36 +173,79 @@ function res = analyze_step3c_trial(base_data, cfg)
     if isfield(pert_data.cfg, 'd_load'), d_load_val = pert_data.cfg.d_load; end
     if isfield(pert_data.cfg, 'delta_fric'), delta_fric_val = pert_data.cfg.delta_fric; end
 
-    has_resim = (dL_act > 0 || dR_act > 0 || delta_m_val ~= 0 || d_load_val ~= 0 || delta_fric_val ~= 0);
-    alpha_no_delay = base_data.alpha;
-    alpha_base_dyn = pert_data.alpha_true;
-    if has_resim
-        alpha_comp_dyn = zeros(N, 1);
-        x_c = zeros(4, 1);
+    % 构造零时滞应用电流 (用于 _no_delay 支路)
+    iL_base_nd_applied = max(-Imax, min(Imax, iL_base_cmd));
+    iR_base_nd_applied = max(-Imax, min(Imax, iR_base_cmd));
+    iL_comp_nd_applied = max(-Imax, min(Imax, iL_comp_cmd));
+    iR_comp_nd_applied = max(-Imax, min(Imax, iR_comp_cmd));
+
+    % 支路 1: base_no_delay
+    if delta_m_val == 0 && d_load_val == 0 && delta_fric_val == 0
+        alpha_base_no_delay = base_data.alpha;
+    else
+        alpha_base_no_delay = zeros(N, 1);
+        x_b_nd = zeros(4, 1);
         for k = 1:N
-            [x_c_next, ~] = gantry_dynamics_step_rk4(...
-                x_c, iL_comp_applied(k), iR_comp_applied(k), ...
+            [x_next, ~] = gantry_dynamics_step_rk4(...
+                x_b_nd, iL_base_nd_applied(k), iR_base_nd_applied(k), ...
                 base_data.mech, base_data.plant, ...
                 delta_m_val, d_load_val, delta_fric_val, dt, Kf_L, Kf_R);
-            alpha_comp_dyn(k) = x_c(2);
-            x_c = x_c_next;
+            alpha_base_no_delay(k) = x_b_nd(2);
+            x_b_nd = x_next;
         end
-        dalpha_base = alpha_base_dyn - alpha_no_delay;
-        dalpha_comp = alpha_comp_dyn - alpha_no_delay;
-        rms_dalpha_base = sqrt(mean(dalpha_base(mask_eval).^2));
-        rms_dalpha_comp = sqrt(mean(dalpha_comp(mask_eval).^2));
-        rms_alpha_base_dyn = sqrt(mean(alpha_base_dyn(mask_eval).^2));
-        rms_alpha_comp_dyn = sqrt(mean(alpha_comp_dyn(mask_eval).^2));
-    else
-        rms_dalpha_base = 0.0;
-        rms_dalpha_comp = 0.0;
-        rms_alpha_base_dyn = sqrt(mean(alpha_base_dyn(mask_eval).^2));
-        rms_alpha_comp_dyn = rms_alpha_base_dyn;
     end
+
+    % 支路 2: base_delayed
+    % pert_data.alpha_true 已经由 step3c_apply_imperfections 采用 iL_base_applied, iR_base_applied
+    % 以及相同的 delta_m, d_load, delta_fric 计算得到
+    alpha_base_delayed = pert_data.alpha_true;
+
+    % 支路 3: comp_no_delay
+    alpha_comp_no_delay = zeros(N, 1);
+    x_c_nd = zeros(4, 1);
+    for k = 1:N
+        [x_next, ~] = gantry_dynamics_step_rk4(...
+            x_c_nd, iL_comp_nd_applied(k), iR_comp_nd_applied(k), ...
+            base_data.mech, base_data.plant, ...
+            delta_m_val, d_load_val, delta_fric_val, dt, Kf_L, Kf_R);
+        alpha_comp_no_delay(k) = x_c_nd(2);
+        x_c_nd = x_next;
+    end
+
+    % 支路 4: comp_delayed
+    alpha_comp_delayed = zeros(N, 1);
+    x_c_d = zeros(4, 1);
+    for k = 1:N
+        [x_next, ~] = gantry_dynamics_step_rk4(...
+            x_c_d, iL_comp_applied(k), iR_comp_applied(k), ...
+            base_data.mech, base_data.plant, ...
+            delta_m_val, d_load_val, delta_fric_val, dt, Kf_L, Kf_R);
+        alpha_comp_delayed(k) = x_c_d(2);
+        x_c_d = x_next;
+    end
+
+    % 时滞引入的额外动态偏差
+    dalpha_base = alpha_base_delayed - alpha_base_no_delay;
+    dalpha_comp = alpha_comp_delayed - alpha_comp_no_delay;
+
+    rms_alpha_base_dyn = sqrt(mean(alpha_base_delayed(mask_eval).^2));
+    rms_alpha_comp_dyn = sqrt(mean(alpha_comp_delayed(mask_eval).^2));
+    rms_dalpha_base    = sqrt(mean(dalpha_base(mask_eval).^2));
+    rms_dalpha_comp    = sqrt(mean(dalpha_comp(mask_eval).^2));
+
+    % 物理偏航绝对改善度
     if rms_alpha_base_dyn > 1.0e-12
-        eta_alpha_dyn = (1.0 - rms_alpha_comp_dyn / rms_alpha_base_dyn) * 100.0;
+        eta_alpha_abs = (1.0 - rms_alpha_comp_dyn / rms_alpha_base_dyn) * 100.0;
     else
-        eta_alpha_dyn = NaN;
+        eta_alpha_abs = NaN;
+    end
+    eta_alpha_dyn = eta_alpha_abs;
+
+    % 时滞引入动态偏差抑制比
+    if rms_dalpha_base > 1.0e-12
+        eta_alpha_delay = (1.0 - rms_dalpha_comp / rms_dalpha_base) * 100.0;
+    else
+        eta_alpha_delay = NaN;
     end
 
     % 8.5 传感器滤波衰减量量化 (针对位置噪声 C3)
@@ -247,11 +291,13 @@ function res = analyze_step3c_trial(base_data, cfg)
     % 10. 越界与安全诊断
     unproj_eval = theta_unprojected(mask_eval);
     proj_eval   = theta_projected(mask_eval);
-    unproj_clipped_count = sum(unproj_eval < opts_rls.theta_min - 1e-9 | unproj_eval > opts_rls.theta_max + 1e-9);
-    sample_clip_ratio = unproj_clipped_count / N_eval;
-    has_any_clip = (unproj_clipped_count > 0);
-    unproj_max_peak = max(abs(unproj_eval));
-    exceed_false_ratio = 100.0 * mean(abs(proj_eval) > 1.0e-5);
+    unproj_low_clip_count  = sum(unproj_eval < opts_rls.theta_min - 1e-9);
+    unproj_high_clip_count = sum(unproj_eval > opts_rls.theta_max + 1e-9);
+    unproj_clipped_count   = unproj_low_clip_count + unproj_high_clip_count;
+    sample_clip_ratio      = unproj_clipped_count / N_eval;
+    has_any_clip           = (unproj_clipped_count > 0);
+    unproj_max_peak        = max(abs(unproj_eval));
+    exceed_false_ratio     = 100.0 * mean(abs(proj_eval) > 1.0e-5);
 
     % 11. 打包单次试验输出
     res = struct();
@@ -287,7 +333,13 @@ function res = analyze_step3c_trial(base_data, cfg)
     res.rms_dalpha_comp     = rms_dalpha_comp;
     res.rms_alpha_base_dyn  = rms_alpha_base_dyn;
     res.rms_alpha_comp_dyn  = rms_alpha_comp_dyn;
+    res.eta_alpha_abs       = eta_alpha_abs;
+    res.eta_alpha_delay     = eta_alpha_delay;
     res.eta_alpha_dyn       = eta_alpha_dyn;
+    res.alpha_base_delayed  = alpha_base_delayed;
+    res.alpha_comp_delayed  = alpha_comp_delayed;
+    res.alpha_base_no_delay = alpha_base_no_delay;
+    res.alpha_comp_no_delay = alpha_comp_no_delay;
 
     res.svf_atten_dB        = svf_atten_dB;
     res.pe_false_alarm_rate = pe_false_alarm_rate;
@@ -300,11 +352,13 @@ function res = analyze_step3c_trial(base_data, cfg)
     res.comp_sat_ratio_R    = comp_sat_ratio_R;
     res.comp_sat_ratio_total= comp_sat_ratio_total;
 
-    res.unproj_max_peak     = unproj_max_peak;
-    res.unproj_clipped_count= unproj_clipped_count;
-    res.sample_clip_ratio   = sample_clip_ratio;
-    res.has_any_clip        = has_any_clip;
-    res.exceed_false_ratio  = exceed_false_ratio;
+    res.unproj_max_peak        = unproj_max_peak;
+    res.unproj_low_clip_count  = unproj_low_clip_count;
+    res.unproj_high_clip_count = unproj_high_clip_count;
+    res.unproj_clipped_count   = unproj_clipped_count;
+    res.sample_clip_ratio      = sample_clip_ratio;
+    res.has_any_clip           = has_any_clip;
+    res.exceed_false_ratio     = exceed_false_ratio;
 
     % 评估窗口内时序序列 (用于 C7/C8 统计检验)
     res.theta_proj_eval     = proj_eval;

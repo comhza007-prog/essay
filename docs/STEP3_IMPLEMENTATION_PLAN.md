@@ -390,8 +390,11 @@ $$\alpha_{\text{raw,pert}}(k) = \frac{y_{R,\text{pert}}(k) - y_{L,\text{pert}}(k
 - **C4 核心定位：严格限定为“诊断评估模式 (Diagnostic Evaluation Mode)”**：
   在数学上，单参数 RLS 回归模型为：
   $$y(k) = \phi_{\Delta K_f}(k) \Delta K_f + \varepsilon(k)$$
-  偏载产生的未建模惯性偏航力矩 $T_{\text{load}}(t) = -\Delta m \cdot \ddot{y}_c(t) d_{\text{load}}$ 与平动加减速同频，必然严重破坏单参数回归的无偏性。
+  偏载产生的未建模惯性偏航力矩 $T_{\text{load}}(t) = -\Delta m \cdot \ddot{y}_G(t) d_{\text{load}}$ 与平动加减速同频，必然严重破坏单参数回归的无偏性。
   **Step 3C 明确不做多参数联合辨识，严格定位为：定量评估偏载存在时单参数估计器出现的估计偏差 $\hat{\Delta K}_f(\Delta m, d_{\text{load}}) - \Delta K_f^*$ 与补偿退化边界**，绝不声称单参数估计器“分离或解耦”了偏载力矩。
+  为隔离原始辨识误差，C4 显式报告相对 $d_{\text{load}}=0$ 的增量偏载串扰偏差：
+  $$\theta_{\text{payload\_bias}}(d_{\text{load}}) = \hat{\theta}(d_{\text{load}}) - \hat{\theta}(0)$$
+  对 $d_{\text{load}} = \pm 0.05\text{ m}$ 检查偏差符号是否反转以验证惯性耦合机理。
 
 ---
 
@@ -403,64 +406,62 @@ $$\alpha_{\text{raw,pert}}(k) = \frac{y_{R,\text{pert}}(k) - y_{L,\text{pert}}(k
 | **Test C2** | **CAN 传输时滞与异步失步** | 对称时滞 $1, 2, 3\text{ ms}$；非对称 $d_L = 1\text{ ms}, d_R = 2\text{ ms}$；调用公共 `common/gantry_dynamics_step_rk4.m` 重积分 | 评估时滞引起的推力异步相位差对收敛速度与重分配补偿残差的影响；目标 $\eta_{\text{sat}} \ge 90\%$ |
 | **Test C3** | **高频传感测量随机噪声** | 编码器量化 + 高斯白噪声 $\sigma_y \in [1, 2, 5]\ \mu\mathrm{m}$；Monte Carlo $N=30$ | 检验因果 SVF 状态重构信噪比与 PE 能量滑动门控抗噪鲁棒性；目标 $\eta_{\text{sat}} \ge 90\%$ |
 | **Test C4** | **偏载动力学耦合诊断评估** | 固定 $\Delta m = 50.0\text{ kg}$，调用公共动力学核积分；$d_{\text{load}} \in [\pm 0.05, \pm 0.10, \pm 0.20]\text{ m}$；单参数回归 | 诊断模式：定量记录偏载惯性力矩在单参数回归中的串扰偏差；状态记为 `PASS`, `DEGRADED_BY_PAYLOAD` |
-| **Test C5** | **极端复合恶劣工况回放** | 增益 $2\%$ + 偏置 $20\text{ ct}$ + 异步延迟 $1/2\text{ ms}$ + 噪声 $2\mu\mathrm{m}$ + 偏载 $\Delta m=50\text{kg}, d_{\text{load}}=0.1\text{ m}$；$N=100$ | 全要素叠加下评估最劣收敛边界与投影保护截断行为；如实报告 `PASS` 或 `DEGRADED` |
-| **Test C6** | **统一绝对敏感度龙卷风排序** | 针对每类扰动定义物理基准值 $p_0$ 与摄动量 $\Delta p$；计算统一绝对敏感度 $S_{p}$ | 确定实际工程中对偏航残差影响最剧烈的关键物理敏感源（Tornado Ranking） |
-| **Test C7** | **强扰动下凸集投影安全性** | 注入大冲击偏载与电流阶跃故障跳变；Monte Carlo $N=30$ | 统计样本级/试验级越界率与最大发散峰值，断言投影后 0 越界、0 非有限值，检验协方差有界性 |
-| **Test C8** | **标称对称基准虚假补偿评测** | 标称对称模型（$r=1.00$）施加 C5 级复合非理想扰动；Monte Carlo $N=100$ | 定量评测噪声诱发的虚假重分配失调：要求 $P_{95}(\|\hat{\Delta K}_f\|) \le \epsilon_{\text{false}}$ |
+| **Test C5** | **复合工况两阶段评测** | 阶段一：128 角点确定性扫描；阶段二：前3最劣角点叠加随机噪声 ($N=100$) | 定位为“给定均匀分布下的随机复合鲁棒性”与最劣角点评估；如实报告 `PASS` 或 `DEGRADED` |
+| **Test C6** | **规范归一化龙卷风双重排序** | 统一输出物理导数 $S_{\text{physical}}$ 与范围归一化影响量 $\text{Impact}_p$；噪声 $N=30$ 尾部统计 | 双重独立排序：估计器误差影响量排序与物理偏航 $\text{RMS}(\alpha_{\text{comp}})$ 影响量排序 |
+| **Test C7** | **凸集投影双向安全性检验** | 明确为传感器阶跃故障；分别注入正反向故障确保上下物理边界均被真实激活；$N=30$ | 断言低端截断数 $>0$、高端截断数 $>0$、投影后 0 越界、0 非有限值、协方差有界 |
+| **Test C8** | **标称对称虚假补偿双域评测** | 拆分为 C8A (无偏载传感器/通信假补偿) 与 C8B (含偏载混淆)；$N=100$ | 严格检验 5 项判据（含超标时间比例）；未达标时如实报告 `FAIL_FALSE_COMPENSATION_TIME_RATIO` |
 
 ---
 
 ### 4. 关键分析方法学与量化指标定义
 
-#### 4.1 统一绝对敏感度龙卷风排序算法 (Test C6)
-为避免在基准点为零（如 $\delta_g = 0, i_{\text{bias}} = 0, d_{\text{act}} = 0, \sigma_y = 0, d_{\text{load}} = 0$）时出现分母为零的数学缺陷，**所有扰动统一采用绝对退化敏感度指标**：
-$$S_p = \frac{|\eta_{\text{sat}}(p_0 + \Delta p) - \eta_{\text{sat}}(p_0 - \Delta p)|}{2 \Delta p} \quad \text{或单边} \quad \frac{|\eta_{\text{sat}}(p_0) - \eta_{\text{sat}}(p_0 + \Delta p)|}{\Delta p}$$
-其中对于电流增益偏差 $\delta_g$（基准 $\delta_g = 0$）：
-$$S_{\delta_g} = \frac{|\eta_{\text{sat}}(+\Delta \delta_g) - \eta_{\text{sat}}(-\Delta \delta_g)|}{2 \Delta \delta_g} \quad \left[\frac{\%}{1.0 \text{ 增益误差}}\right]$$
-含义为：每出现 1.0（即 100%）电流增益偏差所导致的偏航力矩抑制率百分点下降幅度（等价于每 1% 增益误差下降 $S_{\delta_g} / 100$ 个百分点）。
+#### 4.1 四条匹配参考支路因果重积分架构
+为消除动态角对比中的参考系失配（坚决禁止使用零偏载轨迹作为含载轨迹的参考），单次试验内部必须采用相同的 $\Delta m, d_{\text{load}}, \delta_{\text{fric}}$ 逐步调用公共单步函数生成四条匹配轨迹：
+1. `base_no_delay`：未补偿指令，零时滞（$d_{\text{act}}=0$）；
+2. `base_delayed`：未补偿指令，真实执行时滞（$d_{\text{act}}$）；
+3. `comp_no_delay`：补偿指令，零时滞（$d_{\text{act}}=0$）；
+4. `comp_delayed`：补偿指令，真实执行时滞（$d_{\text{act}}$）。
 
-| 扰动分类 | 参数符号 | 基准工作点 $p_0$ | 摄动步长 $\Delta p$ | 物理单位 | 敏感度指标定义 |
-| :--- | :---: | :---: | :---: | :---: | :--- |
-| 电流增益偏差 | $\delta_{g}$ | $0.00$ | $+0.02$ | - ($2\%$) | $S_{\delta_g} = \Delta \eta_{\text{sat}} / (2\Delta \delta_g) \ [\% / 1.0\text{ 增益偏差}]$ |
-| 霍尔电流零漂 | $i_{\text{bias}}$ | $0.0$ | $+20.0$ | counts | $S_{i_{\text{bias}}} = \Delta \eta_{\text{sat}} / \Delta i_{\text{bias}} \ [\% / \text{count}]$ |
-| CAN 传输时滞 | $d_{\text{act}}$ | $0$ | $+2$ | ms | $S_{d} = \Delta \eta_{\text{sat}} / \Delta d \ [\% / \text{ms}]$ |
-| 传感位置噪声 | $\sigma_y$ | $0.0$ | $+2.0$ | $\mu\mathrm{m}$ | $S_{\sigma_y} = \Delta \eta_{\text{sat}} / \Delta \sigma_y \ [\% / \mu\mathrm{m}]$ |
-| 偏载质心偏移 | $d_{\text{load}}$ | $0.00$ | $+0.10$ | m ($\Delta m=50\text{kg}$) | $S_{d_{\text{load}}} = \Delta \eta_{\text{sat}} / \Delta d_{\text{load}} \ [\% / \text{m}]$ |
+在此基础上定义严格匹配的动态指标：
+- **补偿对实际物理偏航的绝对改善度**：
+  $$\eta_{\alpha,\text{abs}} = 100 \times \left(1 - \frac{\operatorname{RMS}(\alpha_{\text{comp,delayed}})}{\operatorname{RMS}(\alpha_{\text{base,delayed}})}\right)$$
+- **时滞引入的额外动态偏差抑制比**：
+  $$d\alpha_{\text{base}} = \alpha_{\text{base,delayed}} - \alpha_{\text{base,no\_delay}}, \quad d\alpha_{\text{comp}} = \alpha_{\text{comp,delayed}} - \alpha_{\text{comp,no\_delay}}$$
+  $$\eta_{\alpha,\text{delay}} = 100 \times \left(1 - \frac{\operatorname{RMS}(d\alpha_{\text{comp}})}{\operatorname{RMS}(d\alpha_{\text{base}})}\right)$$
 
-#### 4.2 凸集投影安全性双重统计检验准则 (Test C7)
-拒绝“理论必然 100% 安全”的无检验假设，设定 Monte Carlo $N=30$ 次强扰动试验，显式区分样本级与试验级统计，并强制导出完整未受限序列：
-1. **双重越界率量化定义**：
-   - **样本级越界率 (Sample-Level Clip Ratio)**：
-     $$\rho_{\text{sample}} = \frac{\sum_{i=1}^N \sum_{k \in \mathcal{K}_{\text{eval}}} \mathbb{I}(\theta_{\text{unproj}}(k, i) \notin \Omega_\theta)}{N \cdot |\mathcal{K}_{\text{eval}}|}$$
-     即在强激励评测窗口内，被凸集投影截断的总样本数占所有试验总采样点数的比例；
-   - **试验级越界率 (Trial-Level Clip Ratio)**：
-     $$\rho_{\text{trial}} = \frac{\sum_{i=1}^N \mathbb{I}(\exists k \in \mathcal{K}_{\text{eval}}, \theta_{\text{unproj}}(k, i) \notin \Omega_\theta)}{N}$$
-     即在全部 $N$ 次 Monte Carlo 试验中，至少触发过一次投影截断的试验次数所占比例。
-2. **估计器与评估模块显式输出变量要求**：
-   单步及批处理评估核必须显式导出并保存下列序列，禁止仅返回最终标量：
-   - `theta_unprojected`：未受限估计历史序列，用于统计发散峰值 $\max |\theta_{\text{unprojected}}|$；
-   - `theta_projected`：投影后保界历史序列，用于断言逐点满足 $\theta_k \in [\theta_{\min}, \theta_{\max}]$；
-   - `P_history`：协方差演化历史序列，用于断言逐点满足 $P_{\min} \le P_k \le P_{\max}$；
-   - `projection_mask`：布尔时间掩码（$\mathbb{I}(\theta_{\text{proj}} \ne \theta_{\text{unproj}})$），用于精确计算时序截断区间。
-3. **投影保护流硬性断言**：
-   - 投影后越界次数严格 $= 0$；
-   - 非有限值（NaN / Inf）出现次数严格 $= 0$；
-   - 协方差有界性条件逐点严格成立。
+#### 4.2 龙卷风排序双重规范定义 (Test C6)
+严禁跨物理量纲直接排序导数。统一输出两类指标：
+1. **单因素物理导数**（仅用于单一物理参数内部灵敏度分析）：
+   $$S_{\text{physical}} = \frac{|\text{metric}_{\text{high}} - \text{metric}_{\text{low}}|}{p_{\text{high}} - p_{\text{low}}} \quad [\text{单位: } \text{metric单位} / \text{参数物理单位}]$$
+   增益漂移统一按百分点定义：$\Delta \text{metric} / 4.0\ [\text{单位} / \text{percentage-point}]$。
+2. **范围归一化影响量**（用于全局龙卷风排序）：
+   $$\text{Impact}_p = \max(|\text{metric}_{\text{low}} - \text{metric}_{\text{nom}}|, |\text{metric}_{\text{high}} - \text{metric}_{\text{nom}}|)$$
+   统一建立两个独立龙卷风排行榜：
+   - **排行榜 A（估计器参数偏差影响量）**：$\text{metric} = |\hat{\Delta K}_f - \Delta K_f^*|\ [\text{N/count}]$；
+   - **排行榜 B（物理偏航残余影响量）**：$\text{metric} = \operatorname{RMS}(\alpha_{\text{comp}})\ [\text{rad}]$。
+   噪声因素必须执行 $N=30$ Monte Carlo 试验，提取 P95 尾部统计作为 $\text{metric}_{\text{high}}$。
 
-#### 4.3 标称对称基准虚假补偿定量判据 (Test C8)
-当被控对象完全对称（$r = 1.00, \Delta K_{f,\text{true}} = 0$）时，随机噪声与采样偏置会导致估计器产生有限幅度随机抖动。
-设定 Monte Carlo $N = 100$ 统计判据：
-- **估计值 95% 分位数门槛**：$P_{95}(|\hat{\Delta K}_f|) \le \epsilon_{\text{false}} = 1.0 \times 10^{-5}\text{ N/count}$；
-- **估计值中位数**：$\operatorname{median}(|\hat{\Delta K}_f|) \le 5.0 \times 10^{-6}\text{ N/count}$；
-- **虚假前馈增益偏离度**：$\max(|\gamma_L - 1|, |\gamma_R - 1|) \le 0.005$（即虚假重分配失衡不超过 $0.5\%$）；
-- **虚假诱导偏航力矩 RMS**：$\operatorname{RMS}(e_{T,\text{comp}}) \le 0.01\text{ Nm}$；
-- **超标时间比例**：$|\hat{\Delta K}_f| > \epsilon_{\text{false}}$ 的持续步数比例 $\le 5.0\%$。
+#### 4.3 凸集投影双向安全性双重检验 (Test C7)
+明确将故障命名为 `Measured_Current_Sensor_Step_Fault`。为证实双侧物理边界均具备有效保护能力，分别配置驱动参数使估计流分别向上下界冲击，并硬性断言：
+$$\text{low\_bound\_clip\_count} > 0, \quad \text{high\_bound\_clip\_count} > 0$$
+$$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k \in [P_{\min}, P_{\max}]$$
 
-#### 4.4 随机试验 Monte Carlo 统计字段规范
-针对 Test C1、C3、C5、C8，固定基础随机种子序列：
-$$\text{Seed}(j) = 20260924 + j, \quad j = 1, 2, \dots, N$$
-CSV 结果表增加统计分布列，扩展为 **38 列架构**：
-`Case, Test_Item, Limit_Scenario, Imax_counts, Imax_Source, Param_Source, Disturbance_Type, Disturbance_Intensity, Random_Seed, Trial_Index, Delta_Kf_True, Delta_Kf_Hat_Mean, Delta_Kf_Hat_Median, Delta_Kf_Hat_P95, Delta_Kf_RMSE, KfL_Hat, KfR_Hat, gamma_L, gamma_R, Calibration_Validity, eta_ideal, eta_quant, eta_sat_mean, eta_sat_p05, RMS_T_res_base, RMS_T_res_comp, alpha_ss_base, alpha_ss_comp, base_left_sat, base_right_sat, base_total_sat, comp_left_sat, comp_right_sat, comp_total_sat, unproj_max_peak, proj_count, PE_active_ratio, Calibration_Status`。
+#### 4.4 标称对称虚假补偿双域评测与死区机制 (Test C8)
+拆分为两个子测试：
+- **C8A (`C8A_SensorCommFalseComp`)**：$r=1.00$、无偏载，考核传感器/通信噪声下的虚假补偿；
+- **C8B (`C8B_PayloadConfounding`)**：$r=1.00$、施加偏载（$\Delta m=50\text{kg}, d_{\text{load}} \in [-0.10, +0.10]\text{ m}$），考核机械偏载对对称系统的混淆。
+
+统计定义明确区分：
+- `time_exceed_mean`：试验在评测窗口内 $|\theta_k| > 1.0\times 10^{-5}$ 的时间比例均值；
+- `trial_exceed_ratio`：最终估计值 $|\hat{\Delta K}_f| > 1.0\times 10^{-5}$ 的试验比例（作为辅助诊断）。
+正式验收必须考核 `time_exceed_mean <= 5.0%`。若未达标，严禁调整阈值，如实输出 `FAIL_FALSE_COMPENSATION_TIME_RATIO`。若需要控制虚假补偿，应在控制器前馈中引入死区（$|\hat{\Delta K}_f| \le 1.0\times 10^{-5}$ 时强制保持 $\gamma_L = \gamma_R = 1.0$）。
+
+#### 4.5 三表拆分 CSV 架构规范
+坚决杜绝不同语义字段混合，拆分为三个高内聚数据表：
+1. **`step3c_performance_results.csv`**：记录 C4 偏载诊断、C5 复合工况与 C8 虚假补偿性能，包含实际统计值（禁止硬编码）；
+2. **`step3c_sensitivity_results.csv`**：记录 C6 灵敏度两套排行榜；
+3. **`step3c_projection_results.csv`**：记录 C7 凸集投影安全性与双侧截断计数。
+回读断言必须对行数、列数及关键浮点字段逐项执行内存值一致性校验（$|T_{\text{read}} - \text{mem}| < 10^{-12}$）。
 
 ---
 
