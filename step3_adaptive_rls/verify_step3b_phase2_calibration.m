@@ -14,7 +14,8 @@
 %   2. 独立降额限幅 Imax_derated = 4500.0 counts (显式模拟人为降额/台架安全限制工况)
 %   3. 检查主标定流程 calib.is_valid，异常截断工况独立记录 Calibration_Validity
 %   4. 严格解耦基线支路饱和率 (base_sat) 与补偿后命令支路饱和率 (comp_sat)
-%   5. 状态报告明确: P1-P5、P7 满足验收条件，P6 完成扫描并如实定量识别出饱和失效区间
+%   5. 状态报告明确: P1-P4、P7 满足常规标定验收；P5 为截断敏感性评估；
+%      P6 完成扫描并如实定量识别出饱和失效区间
 % =========================================================================
 
 function verify_step3b_phase2_calibration()
@@ -395,10 +396,11 @@ function verify_step3b_phase2_calibration()
                     res_p6.comp_sat_ratio_L, res_p6.comp_sat_ratio_R, res_p6.comp_sat_ratio_total, ...
                     res_p6.eta_sat, scan_status);
                 
+                % P6 只评价饱和性能，不填写 eta_ideal
                 csv_rows{end+1} = {tag, 'TestP6_Current_Saturation_Sweep', sc_name, Imax_active, imax_src, ...
                     sprintf('Scan_%.2f_Imax', factor), factor, ...
                     ds.Delta_Kf_true, cal.Delta_Kf_hat, cal.Kf_L_hat, cal.Kf_R_hat, ...
-                    cal.gamma_L, cal.gamma_R, 'VALID', res_p6.eta_unsat, NaN, res_p6.eta_sat, ...
+                    cal.gamma_L, cal.gamma_R, 'VALID', NaN, NaN, res_p6.eta_sat, ...
                     res_p6.rms_base, res_p6.rms_comp, res_p6.alpha_ss_base, res_p6.alpha_ss_comp, ...
                     res_p6.base_sat_ratio_L, res_p6.base_sat_ratio_R, res_p6.base_sat_ratio_total, ...
                     res_p6.comp_sat_ratio_L, res_p6.comp_sat_ratio_R, res_p6.comp_sat_ratio_total, ...
@@ -460,7 +462,7 @@ function verify_step3b_phase2_calibration()
     fprintf('>>> Phase 2 结构化标定评测结果已成功导出至: %s\n', csv_file);
     fprintf('=========================================================================\n');
     fprintf('   STEP 3B PHASE 2 离线标定基准测试完成:                                  \n');
-    fprintf('   - P1-P5、P7 满足对应验收条件；                                        \n');
+    fprintf('   - P1-P4、P7 满足常规标定验收条件；P5 为截断敏感性评估；             \n');
     fprintf('   - P6 完成扫描并如实定量识别出饱和失效区间 (预期性能退化)              \n');
     fprintf('=========================================================================\n');
 end

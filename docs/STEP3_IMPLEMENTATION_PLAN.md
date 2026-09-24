@@ -272,7 +272,7 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
    明确限定：此项仅作为物理刚度下的理论静态几何偏差推导，不作为实际台架动态偏航闭环改善。
 
 ### 3. Phase 2 双场景全套离线基准测试实测结果 (Tests P1 ~ P7)
-全套评测数据已导出至 [`output/step3_adaptive_rls/step3b_phase2_calibration_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase2_calibration_results.csv)（包含 32 列结构化诊断字段，共 40 组记录）：
+全套评测数据已导出至 [`output/step3_adaptive_rls/step3b_phase2_calibration_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3b_phase2_calibration_results.csv)（包含 32 列结构化诊断字段，共 38 组记录：每个限幅场景 19 行，两个场景合计 38 行）。统计口径需严格区分：各饱和率按数据集全时段统计，$\eta_{\mathrm{ideal}}$、$\eta_{\mathrm{quant}}$ 与 $\eta_{\mathrm{sat}}$ 按强激励评测窗口 $t\in[0.5,2.3]\text{ s}$ 计算，两者不可直接视为同一时间窗口的指标：
 
 #### 场景一：项目标称硬件限幅 (`Imax = 16000.0 counts`, 来源: `param_init.ctrl.spd_max_out`)
 标称运动轨迹峰值电流为 $3120\text{ counts}$，仅占硬件上限的 $19.5\%$；补偿后峰值 $3788.6\text{ counts}$（占 $23.7\%$），**拥有高达 $76.3\%$ 的线性硬件安全裕度**。
@@ -313,12 +313,10 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
 
 ### 4. Phase 2 验收判定与最终物理结论
 1. **测试验收判定**：
-   - **P1-P5、P7 满足对应验收条件**；
+   - **P1-P4、P7 满足常规标定验收条件**；
+   - **P5 为结构失配下的投影截断敏感性评估，不作为常规标定通过项**；
    - **P6 完成饱和容限扫描并如实定量识别出物理饱和失效区间**（在 $1.00 I_{\max}$ 与 $1.25 I_{\max}$ 处出现预期的物理性能退化，判定为 `FAIL_DUE_TO_SATURATION`）；
 2. **正式归档物理结论**：
    > **在项目标称 16000 counts 硬件限幅下，基准往复轨迹处于未饱和区，基于 Phase 1 估计值的静态推力重分配可将执行器非对称引起的偏航力矩残差削减约 99.9%。当名义电流接近或超过限幅时，补偿增益放大弱侧电流并引发先行饱和，抑制效果下降；该退化已通过 P6 扫描定量识别。所有结果均为数值开环回放，不代表物理台架实验或闭环性能。**
 3. **严格范围与隔离承诺**：
    Phase 2 仅完成开环数据回放和前馈重分配离线标定分析，**闭环控制器与分配器未受任何修改**，所有代码、数据与文档保留在本地 Git。
-
-
-
