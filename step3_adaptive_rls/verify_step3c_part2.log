@@ -52,7 +52,7 @@
     - 选取联合最劣角点数: 6 个 (并集去重)
   [阶段二] 在 6 个最劣角点并集上叠加噪声执行 Monte Carlo N = 100...
   [C5_MC100] eta_total_min=28.42%, eta_kf_p05=28.58%, RMS_alpha_p95=5.2239e-04 rad | 状态: [DEGRADED]
-  theta_hat: 中位=-6.4325319e-04, 误差P95=1.56e-03, RMSE=1.14e-03 | 投影触发试验率: 49.00%
+  theta_hat: 中位=-6.4325319e-04, 绝对误差中位=1.54e-03, 误差P95=1.56e-03, RMSE=1.14e-03 | 投影触发试验率: 49.00%
 
 --- 数据集 [2/2]: r130 (Delta_Kf > 0) ---
   [阶段一] 正在执行 128 角点确定性扫描...
@@ -63,7 +63,7 @@
     - 选取联合最劣角点数: 6 个 (并集去重)
   [阶段二] 在 6 个最劣角点并集上叠加噪声执行 Monte Carlo N = 100...
   [C5_MC100] eta_total_min= 3.32%, eta_kf_p05= 3.64%, RMS_alpha_p95=5.3083e-04 rad | 状态: [DEGRADED]
-  theta_hat: 中位=+7.1847102e-05, 误差P95=1.56e-03, RMSE=1.12e-03 | 投影触发试验率: 49.00%
+  theta_hat: 中位=+7.1847102e-05, 绝对误差中位=1.55e-03, 误差P95=1.56e-03, RMSE=1.12e-03 | 投影触发试验率: 49.00%
 
 =========================================================================
 >>> 开始执行 [Test C6] 统一绝对敏感度与龙卷风双重排序 (Dual Tornado Ranking)
@@ -143,7 +143,8 @@
 --- [C8A] 补齐扰动矩阵的虚假补偿评测 (TestC8A_SensorCommFalseComp, N = 100) ---
   [C8A 统计指标]:
     - P95(|Delta_Kf_hat|)   : 1.8831e-04 N/count (门槛 <= 1.0e-5)
-    - 中位数 median          : 5.9180e-05 N/count (门槛 <= 5.0e-6)
+    - 有符号中位数 median     : -2.6304e-06 N/count
+    - 绝对误差中位数 abs_median: 5.9180e-05 N/count (门槛 <= 5.0e-6)
     - 最大前馈偏离度 max|gamma-1|: 1.7599% (门槛 <= 0.50%)
     - 虚假诱导偏航力矩最大 RMS: 9.7976e-02 Nm (门槛 <= 0.01 Nm)
     - 超标时间比例均值 time_exceed: 92.75% (门槛 <= 5.00%) -> [FAIL]
@@ -164,6 +165,8 @@
   [C8B 诊断统计]:
     - 增量偏载偏差均值 mean(bias) : +3.4604e-06 N/count (P95: 1.2236e-03)
     - 估计值 P95                  : 1.2193e-03 N/count
+    - 估计值有符号中位数 median    : +1.0537e-04 N/count
+    - 估计值绝对误差中位数 abs_med : 6.7887e-04 N/count
     - 最大前馈偏离度 max|gamma-1|  : 11.6826%
     - 虚假诱导偏航力矩最大 RMS     : 5.9941e-01 Nm
   [C8B 综合评测判定]: [DIAGNOSTIC_PAYLOAD_CONFOUNDING]
@@ -178,12 +181,12 @@
 
 =========================================================================
 >>> 正在导出 Step 3C-2 评测数据表 (四表独立架构)...
-    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x61)
+    表 1: step3c_performance_results.csv (C4, C5, C8A, C8B, C8C 性能, 19x66)
     表 2: step3c_sensitivity_results.csv (C6 灵敏度两套排行榜, 20x13)
     表 3: step3c_projection_results.csv  (C7 凸集投影安全性与双侧截断, 2x12)
     表 4: step3c_c8a_deterministic_results.csv (C8A 4 种最劣差模工况, 4x9)
 =========================================================================
-    [OK] 表 1 导出成功 (19 行 x 61 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_performance_results.csv
+    [OK] 表 1 导出成功 (19 行 x 66 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_performance_results.csv
     [OK] 表 2 导出成功 (20 行 x 13 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_sensitivity_results.csv
     [OK] 表 3 导出成功 (2 行 x 12 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_projection_results.csv
     [OK] 表 4 导出成功 (4 行 x 9 列): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_c8a_deterministic_results.csv

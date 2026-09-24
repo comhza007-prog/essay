@@ -453,13 +453,24 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
   严格执行 5 项程序化判据检验（含超标时间比例 `time_exceed_mean <= 5.0%`）。未达标时如实输出 `RAW_ESTIMATOR_FAIL`。
   独立导出 4 种最差确定性差模工况检验数据至独立 CSV 表。
 - **C8B (`TestC8B_PayloadConfounding`)**：$r=1.00$、施加偏载（$\Delta m=50\text{kg}, d_{\text{load}} \in [-0.10, +0.10]\text{ m}$），引入匹配的 $d_{\text{load}}=0$ 对照组，计算增量偏载偏差均值 `theta_payload_bias` 与 P95 统计值 `theta_payload_bias_p95_abs`，状态定性为 `DIAGNOSTIC_PAYLOAD_CONFOUNDING`。
-- **C8C (`TestC8C_GatedApplication`)**：独立的迟滞门控开环应用层评测（$\theta_{\text{on}}=1.0\times 10^{-5}$，$\theta_{\text{off}}=0.7\times 10^{-5}$，确认窗口 $N_{\text{confirm}}=200\text{ ms}$）。
+- **C8C (`TestC8C_GatedApplication`)**：独立的迟滞门控应用层评测（$\theta_{\text{on}}=1.0\times 10^{-5}$，$\theta_{\text{off}}=0.7\times 10^{-5}$，确认窗口 $N_{\text{confirm}}=200\text{ ms}$）。
   在不改动底层控制器红线的前提下，完成时序修正（执行器延迟后状态统计）与**真实 RK4 动力学重积分**。
+  **运行模式定性**：显式声明为 `ONE_PASS_CAUSAL_GATED_REPLAY`（单次因果门控反事实回放：估计序列来自未补偿基线试验；门控补偿后的状态不反馈至估计器重新递推）。
+  **实际增益与饱和计算**：严格统计延迟后实际施加在执行器上的门控增益均值（$\gamma_L, \gamma_R$）与真实物理饱和时间比例 `comp_total_sat`；标定有效性标记为 `NOT_APPLICABLE`，失效计数与截断计数记为 `NaN`。
   **结论收紧声明**：由于持续差模增益漂移未被根本消除，门控后执行激活时间仍达 $88.69\%$，最大增益偏离（$2.711\%$）甚至高于 C8A 原始值（$1.760\%$），RK4 重积分所得物理偏航角改善度为 $-0.69\%$（因门控阶跃突变带来微小扰动），因此**绝不能据此宣称物理偏角动态改善或虚假补偿已解决**，状态严格定性为 `GATED_APPLICATION_EVAL_ONLY`。
 
 #### 4.5 四表独立 CSV 架构规范
 坚决杜绝不同语义字段混合，拆分为四个高内聚独立数据表：
-1. **`step3c_performance_results.csv`**（19 行 x 61 列）：记录 C4 偏载诊断（含 $R^2$ 局部特征）、C5 复合工况（多指标最劣角点并集抽样与角点信息）、C8A 原始估计器（含游程统计）、C8B 偏载混淆（含 P95 偏载偏差）与 C8C 门控仿真（含真实动态角及改善度）；显式声明应用模式（`POSTHOC_STATIC_REPLAY` / `CAUSAL_GATED_REPLAY`），严禁使用硬编码零伪装计算值；
+1. **`step3c_performance_results.csv`**（19 行 x 66 列）：
+   - 区分估计值有符号中位数（`Delta_Kf_Hat_Median`）与绝对误差中位数（`Delta_Kf_AbsError_Median`）；
+   - 细化总抑制率分布：`eta_total_mean`, `eta_total_p05`, `eta_total_min`；
+   - 区分物理偏航均值与尾部：`RMS_alpha_comp_dyn_mean`, `RMS_alpha_comp_dyn_p95`；
+   - 彻底拆分重用列，独立设立专用字段：
+     * `theta_exceed_time_mean`（C8A/C8B 输出真实比例，C4/C5/C8C 为 `NaN`）；
+     * `theta_final_exceed_trial_ratio`（C8A/C8B 输出真实比例，C4/C5/C8C 为 `NaN`）；
+     * `projection_trial_ratio`（C5 输出真实比例，C4/C8A/C8B/C8C 为 `NaN`）；
+     * `gate_active_time_mean`（C8C 输出门控激活时间比例，其他为 `NaN`）；
+   - 显式声明应用模式（`POSTHOC_STATIC_REPLAY` / `ONE_PASS_CAUSAL_GATED_REPLAY`）；
 2. **`step3c_sensitivity_results.csv`**（20 行 x 13 列）：记录 C6 灵敏度两套排行榜（含单因素物理导数及带量纲物理单位、`Range_Impact`）；
 3. **`step3c_projection_results.csv`**（2 行 x 12 列）：记录 C7 凸集投影安全性与双侧截断计数；
 4. **`step3c_c8a_deterministic_results.csv`**（4 行 x 9 列）：记录 C8A 4 种最劣确定性差模工况的参数估计、增益偏离与虚假力矩残差。
