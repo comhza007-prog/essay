@@ -323,13 +323,13 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
 
 ---
 
-## 九、Step 3C 技术方案设计：真实非理想因素与扰动下开环鲁棒性与敏感度评估
+## 九、Step 3C 技术方案设计：真实非理想因素与扰动下开环鲁棒性与敏感度评估 (修订版)
 
 ### 1. 方案定位与物理边界约束 (Scope & Strict Boundaries)
 在 Step 3B Phase 1 与 Phase 2 中，已经分别完成了单参数 $\Delta K_f$ 在线因果 RLS 辨识器以及基于估计值的静态推力重分配离线回放验证。然而，先前的测试主要运行在理想平动及单一量化位置通道上。
 
 在实际工业起重机/双驱龙门台架现场，必然存在以下四大类关键物理扰动与非理想非线性：
-1. **电流采样/驱动非理想性**：霍尔电流传感器温漂偏置、增益标定误差、高频斩波测量白噪声；
+1. **电流回路非理想性**：霍尔电流传感器温漂偏置、增益标定误差、高频斩波测量白噪声；
 2. **总线通信延时与异步抖动**：CAN 总线周期性延时（$1 \sim 3\text{ ms}$）以及左右驱动节点调度优先级不同造成的双侧非对称延迟；
 3. **几何测量与状态重构随机噪声**：磁栅尺/光电编码器微小振颤、离散差分引入的高频测量噪声；
 4. **偏载物理力矩耦合**：起重机小车或吊载质心偏移中心线（$d_{\text{load}} \ne 0$），在加减速平动过程中通过惯性力臂产生极大的附加偏航动力学力矩。
@@ -344,87 +344,132 @@ $$\bar{\boldsymbol{\phi}}_{\text{mech}}(k) = \mathbf{D}_{\text{prior}}^{-1} [\dd
 
 ---
 
-### 2. 四大非理想因素数学建模 (Mathematical Modeling of Imperfections)
+### 2. 四大非理想因素数学建模 (Refined Imperfection Modeling)
 
-#### 2.1 电流反馈误差数学模型
-考虑左右驱动器实际回采或执行电流存在比例增益误差 $\delta_{g}$、偏置零漂 $i_{\text{bias}}$ 与测量白噪声 $v_i(k)$：
-$$i_{L,\text{pert}}(k) = (1 + \delta_{g,L}) \cdot i_L(k) + i_{\text{bias},L} + v_{i,L}(k)$$
-$$i_{R,\text{pert}}(k) = (1 + \delta_{g,R}) \cdot i_R(k) + i_{\text{bias},R} + v_{i,R}(k)$$
-- **参数范围设定**：
-  - 增益比例漂移：$\delta_{g,L}, \delta_{g,R} \in [-0.03, +0.03]$（模拟 $\pm 3\%$ 驱动器电流检测偏差）；
-  - 静态零漂偏置：$i_{\text{bias},L}, i_{\text{bias},R} \in [-30, +30]\text{ counts}$（对应 16000 counts 满量程的 $\pm 0.19\%$）；
-  - 高频测量白噪声：$v_{i}(k) \sim \mathcal{N}(0, \sigma_i^2)$，$\sigma_i = 10\text{ counts}$。
+#### 2.1 三层物理电流信号链解耦模型
+为避免执行层误差与测量层误差混淆，将电流信号严格拆分为三层拓扑：
+$$i_{\text{cmd}}(k) \xrightarrow{\text{限幅/执行时滞}} i_{\text{applied}}(k) \xrightarrow{\text{驱动动力学}} \text{Plant} \xrightarrow{\text{传感器测量}} i_{\text{meas}}(k)$$
 
-#### 2.2 CAN 总线传输延迟与异步失步模型
-离散控制周期 $T_s = 1\text{ ms}$。设定左右侧指令与回采通信延时分别为整数步数 $d_L, d_R \in \{0, 1, 2, 3\}$：
-$$i_{L,\text{delayed}}(k) = i_L(k - d_L), \quad i_{R,\text{delayed}}(k) = i_R(k - d_R)$$
-- **延迟测试组合**：
-  1. 对称延迟：$d_L = d_R = 1\text{ ms}, 2\text{ ms}, 3\text{ ms}$；
-  2. 非对称异步延迟：$d_L = 1\text{ ms}, d_R = 2\text{ ms}$ 或 $d_L = 2\text{ ms}, d_R = 1\text{ ms}$（重点考察双驱相位不同步引起的动态推力失衡）。
+1. **控制器指令层**：$i_{L,\text{cmd}}(k), i_{R,\text{cmd}}(k)$（标称往复轨迹或前馈重分配计算指令）；
+2. **执行器物理施加层**（进入被控对象动力学积分）：
+   $$i_{L,\text{applied}}(k) = \operatorname{sat}\left(i_{L,\text{cmd}}(k - d_{\text{act},L}), -I_{\max}, I_{\max}\right)$$
+   $$i_{R,\text{applied}}(k) = \operatorname{sat}\left(i_{R,\text{cmd}}(k - d_{\text{act},R}), -I_{\max}, I_{\max}\right)$$
+   其中 $d_{\text{act}}$ 为控制指令下发到电机执行端的通信/执行时滞。**动力学仿真必须严格使用 $i_{\text{applied}}$ 驱动**。
+3. **传感器测量反馈层**（回传给 RLS 辨识器回归与标定）：
+   $$i_{L,\text{meas}}(k) = (1 + \delta_{g,L}) \cdot i_{L,\text{applied}}(k - d_{\text{meas},L}) + i_{\text{bias},L} + v_{i,L}(k)$$
+   $$i_{R,\text{meas}}(k) = (1 + \delta_{g,R}) \cdot i_{R,\text{applied}}(k - d_{\text{meas},R}) + i_{\text{bias},R} + v_{i,R}(k)$$
+   其中 $d_{\text{meas}}$ 为传感器回采通信延时，$\delta_g$ 为增益误差，$i_{\text{bias}}$ 为霍尔零偏漂移，$v_i(k)$ 为高斯白噪声。**RLS 回归构建严格使用 $i_{\text{meas}}$**。
+- **参数标称摄动区间**：
+  - 增益比例漂移：$\delta_{g,L}, \delta_{g,R} \in [-0.03, +0.03]$（$\pm 3\%$）；
+  - 静态零漂偏置：$i_{\text{bias},L}, i_{\text{bias},R} \in [-30, +30]\text{ counts}$；
+  - 测量高斯白噪声：$v_i(k) \sim \mathcal{N}(0, \sigma_i^2)$，$\sigma_i = 10\text{ counts}$。
 
-#### 2.3 传感器随机测量噪声模型
+#### 2.2 CAN 总线延迟与因果动力学重解算
+离散控制周期 $T_s = 1\text{ ms}$。设定执行延迟 $d_{\text{act}}$ 与回采延迟 $d_{\text{meas}}$：
+- **历史初值规范**：当 $k - d \le 0$ 时，严格设定电流历史值为 0（电机处于静止断电就绪态）：
+  $$i(k - d) = 0, \quad \forall k \le d$$
+- **严格因果动力学重新积分要求**：
+  若存在非零执行器延迟 $d_{\text{act}} > 0$，由于实际施加到左右电机的推力发生时序错位（尤其是双侧非对称延迟 $d_L \ne d_R$ 会激发出额外的动态偏航不平衡力矩），系统状态响应（位移 $y$、偏角 $\alpha$）**必须通过公共底层动力学函数 `common/gantry_dynamics_deriv.m` 重新进行 RK4 数值积分生成**！坚决禁止在未延迟的旧状态轨迹上生硬平移电流进行伪回归。
+- **有效评测窗口**：因果滤波器与时滞存在前置过渡态，评测窗口严格规定为 $t \in [0.5 + d_{\max} T_s, 2.3]\text{ s}$。
+
+#### 2.3 传感器随机高频噪声模型
 实际光栅尺/编码器在量化台阶上叠加微弱的电子学噪声与机械微震动：
-$$y_{L,\text{pert}}(k) = \text{quant}(y_L(k), \Delta y) + v_{y,L}(k)$$
-$$y_{R,\text{pert}}(k) = \text{quant}(y_R(k), \Delta y) + v_{y,R}(k)$$
+$$y_{L,\text{pert}}(k) = \operatorname{quant}(y_L(k), \Delta y) + v_{y,L}(k)$$
+$$y_{R,\text{pert}}(k) = \operatorname{quant}(y_R(k), \Delta y) + v_{y,R}(k)$$
 $$\alpha_{\text{raw,pert}}(k) = \frac{y_{R,\text{pert}}(k) - y_{L,\text{pert}}(k)}{L_e}$$
 - 其中位置白噪声 $v_{y}(k) \sim \mathcal{N}(0, \sigma_y^2)$，$\sigma_y \in [1.0, 5.0]\ \mu\mathrm{m}$；
-- 考察 SVF 因果 4 阶滤波器在叠加噪声下的带外衰减能力，以及滑动窗 PE 能量门控在底噪干扰下是否会出现误触发。
+- 考察 4 阶因果 SVF 状态变量滤波器带外滤波能力及滑动窗 Gram 能量门控稳定性。
 
-#### 2.4 偏载物理力矩耦合模型 ($d_{\text{load}} \ne 0$)
-当起重机吊钩载荷或小车偏离横梁中心线时，偏载距离记为 $d_{\text{load}}$（单位：$\text{m}$，向右为正）。
-在平动加速度 $\ddot{y}_c(t)$ 激励下，偏载质量 $m_{\text{load}} = m_0 + \Delta m$ 产生强烈的附加偏航力矩：
-$$T_{\text{load}}(t) = -m_{\text{load}} \cdot \ddot{y}_c(t) \cdot d_{\text{load}}$$
-总偏航动力学方程扩展为：
-$$J_0 \ddot{\alpha} + B_\alpha \dot{\alpha} + K_\alpha \alpha = T_{\alpha,\text{actuator}}(t) + T_{\text{load}}(t) + T_{\text{dist}}$$
-其中执行器偏航推力矩为：
-$$T_{\alpha,\text{actuator}}(t) = -\frac{L_e}{2} \left[ K_{f,L} i_L(t) + K_{f,R} i_R(t) \right]$$
-- **偏载干扰机理**：由于往复平动时 $\ddot{y}_c(t)$ 与加减速同频，偏载力矩 $T_{\text{load}}(t)$ 在时域波形上与对称驱动电流高度相关，极易与执行器推力非对称项 $\Delta K_f$ 发生频谱混叠。
-- **参数范围设定**：$d_{\text{load}} \in [-0.20, +0.20]\text{ m}$（占跨度 $L_e = 2.0\text{ m}$ 的 $\pm 10\%$）。
+#### 2.4 偏载物理力矩耦合与“诊断评估模式”界定
+起重机吊载质心偏移横梁中心线时，偏载距离记为 $d_{\text{load}}$（单位：$\text{m}$，向右为正）。
+- **完整动力学源保障**：
+  坚决取缔孤立简化的单动力学方程，偏载数据必须直接调用项目权威公共核 [`output/common/gantry_dynamics_deriv.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/common/gantry_dynamics_deriv.m) 进行全状态积分生成。该函数内部已严格包含完整的平动-转动耦合质量惯量矩阵：
+  $$\mathbf{M}(d_{\text{load}}) = \begin{bmatrix} m_{\text{total}} & (m_0 + \Delta m) d_{\text{load}} \\ (m_0 + \Delta m) d_{\text{load}} & J_0 + \Delta m \cdot d_{\text{load}}^2 \end{bmatrix}$$
+  从而如实呈现偏载在加减速平动时通过惯性力臂对偏航自由度激发的强烈物理动力学耦合力矩。
+- **C4 核心定位：严格限定为“诊断评估模式 (Diagnostic Evaluation Mode)”**：
+  在数学上，单参数 RLS 回归模型为：
+  $$y(k) = \phi_{\Delta K_f}(k) \Delta K_f + \varepsilon(k)$$
+  偏载产生的未建模惯性偏航力矩 $T_{\text{load}}(t) = -(m_0+\Delta m)\ddot{y}_c d_{\text{load}}$ 与平动加减速同频，必然严重破坏单参数回归的无偏性。
+  **Step 3C 明确不做多参数联合辨识，严格定位为：定量评估偏载存在时单参数估计器出现的估计偏差 $\hat{\Delta K}_f(d_{\text{load}}) - \Delta K_f^*$ 与补偿退化边界**，绝不声称单参数估计器“分离或解耦”了偏载力矩。
 
 ---
 
 ### 3. Step 3C 离线基准评测矩阵设计 (Tests C1 ~ C8)
 
-针对上述四大非理想扰动，设计 8 项针对性开环回放与敏感度实验：
-
-| 测试项目编号 | 核心评估主题 | 注入扰动与非理想参数设置 | 核心考核指标与物理目的 |
+| 编号 | 测试项目 | 扰动参数配置与数据源 | 考核目的与指标（拒绝先验假设） |
 | :--- | :--- | :--- | :--- |
-| **Test C1** | 电流反馈采样误差敏感度 | $\delta_{g} \in [\pm 1\%, \pm 3\%]$，偏置 $i_{\text{bias}} \in [\pm 15, \pm 30]\text{ ct}$，噪声 $\sigma_i = 10\text{ ct}$ | 检验电流采样比例与漂移对 $\hat{\Delta K}_f$ 的稳态偏差传递增益 |
-| **Test C2** | CAN 通信延迟与异步失调 | 对称延迟 $1, 2, 3\text{ ms}$；非对称延迟 $d_L = 1\text{ ms}, d_R = 2\text{ ms}$ | 评估传输时滞引起的滤波相位差对 RLS 收敛速度与补偿残差的影响 |
-| **Test C3** | 高频传感器随机测量噪声 | 编码器量化 + 高斯白噪声 $\sigma_y \in [1, 2, 5]\ \mu\mathrm{m}$ | 检验 4 阶因果 SVF 状态重构信噪比与 PE 能量滑动门控鲁棒性 |
-| **Test C4** | 偏载工况物理力矩串扰 | 纯净状态下 $d_{\text{load}} \in [\pm 0.05, \pm 0.10, \pm 0.20]\text{ m}$ | 定量解构平动惯性力矩对 $\Delta K_f$ 估计器的串扰幅度与混叠机理 |
-| **Test C5** | 恶劣工况极端复合扰动 | 增益误差 $2\%$ + 偏置 $20\text{ ct}$ + 异步延迟 $1/2\text{ ms}$ + 噪声 $2\mu\mathrm{m}$ + 偏载 $0.1\text{ m}$ | 评估全要素叠加下估计器的最劣收敛边界与投影保护截断行为 |
-| **Test C6** | 扰动敏感度归一化龙卷风排序 | 各单项扰动在标称工作点处 $\pm 20\%$ 摄动下的抑制比退化斜率 | 确定实际工程中对偏航残差影响最剧烈的关键物理敏感源（Tornado Ranking） |
-| **Test C7** | 强扰动下凸集投影安全性验证 | 注入大冲击偏载与电流故障跳变，强制触碰投影物理边界 | 验证估计器在强干扰下投影算子 $\Omega_\theta$ 是否 100% 杜绝参数估计发散 |
-| **Test C8** | 标称对称基准误辨识与底噪评估 | 对标称物理对称模型（$r=1.00$）施加 C5 级复合非理想扰动 | 验证无推力非对称时估计器是否会因环境噪声产生虚假重分配失调 |
+| **Test C1** | **电流三层误差与回采漂移** | $i_{\text{cmd}} \to i_{\text{applied}} \to i_{\text{meas}}$；$\delta_g \in [\pm 1\%, \pm 3\%]$；$i_{\text{bias}} \in [\pm 15, \pm 30]\text{ ct}$；$\sigma_i = 10\text{ ct}$ | 检验电流采样比例与漂移对 $\hat{\Delta K}_f$ 的稳态估计偏差传递增益；目标 $\eta_{\text{sat}} \ge 90\%$ |
+| **Test C2** | **CAN 传输时滞与异步失步** | 对称时滞 $1, 2, 3\text{ ms}$；非对称 $d_L = 1\text{ ms}, d_R = 2\text{ ms}$；动力学因果重积分 | 评估时滞引起的推力异步相位差对收敛速度与重分配补偿残差的影响；目标 $\eta_{\text{sat}} \ge 90\%$ |
+| **Test C3** | **高频传感测量随机噪声** | 编码器量化 + 高斯白噪声 $\sigma_y \in [1, 2, 5]\ \mu\mathrm{m}$；Monte Carlo $N=30$ | 检验因果 SVF 状态重构信噪比与 PE 能量滑动门控抗噪鲁棒性；目标 $\eta_{\text{sat}} \ge 90\%$ |
+| **Test C4** | **偏载动力学耦合诊断评估** | 调用公共动力学核积分；$d_{\text{load}} \in [\pm 0.05, \pm 0.10, \pm 0.20]\text{ m}$；单参数回归 | 诊断模式：定量记录偏载惯性力矩在单参数回归中的串扰偏差；状态记为 `PASS`, `DEGRADED_BY_PAYLOAD` |
+| **Test C5** | **极端复合恶劣工况回放** | 增益 $2\%$ + 偏置 $20\text{ ct}$ + 异步延迟 $1/2\text{ ms}$ + 噪声 $2\mu\mathrm{m}$ + 偏载 $0.1\text{ m}$；$N=100$ | 全要素叠加下评估最劣收敛边界与投影保护截断行为；如实报告 `PASS` 或 `DEGRADED` |
+| **Test C6** | **归一化龙卷风敏感度排序** | 针对每类扰动定义物理基准值 $p_0$ 与摄动量 $\Delta p$；计算绝对退化敏感度 $S_{p,\text{abs}}$ | 确定实际工程中对偏航残差影响最剧烈的关键物理敏感源（Tornado Ranking） |
+| **Test C7** | **强扰动下凸集投影安全性** | 注入大冲击偏载与电流阶跃故障跳变；Monte Carlo $N=30$ | 统计未投影越界次数与最大峰值，断言投影后 0 越界、0 非有限值，检验协方差有界性 |
+| **Test C8** | **标称对称基准虚假补偿评测** | 标称对称模型（$r=1.00$）施加 C5 级复合非理想扰动；Monte Carlo $N=100$ | 定量评测噪声诱发的虚假重分配失调：要求 $P_{95}(\|\hat{\Delta K}_f\|) \le \epsilon_{\text{false}}$ |
 
 ---
 
-### 4. 软件实现结构与输出数据规范
+### 4. 关键分析方法学与量化指标定义
 
-拟在 `output/step3_adaptive_rls/` 目录下组织以下新增/演进模块：
-1. **非理想扰动生成器**：
+#### 4.1 归一化龙卷风敏感度计算方法 (Test C6)
+针对不同扰动参数量纲差异（时滞 $\text{ms}$、噪声 $\mu\mathrm{m}$、偏置 $\text{counts}$、偏载 $\text{m}$），统一采用**绝对退化敏感度**指标：
+$$S_{p,\text{abs}} = \frac{|\eta_{\text{sat}}(p_0) - \eta_{\text{sat}}(p_0 + \Delta p)|}{\Delta p} \quad \left[\frac{\%}{\text{物理单位}}\right]$$
+对基准非零的相对增益误差参数（$\delta_g$），补充相对敏感度：
+$$S_{p,\text{rel}} = \frac{|\eta_{\text{sat}}(p_0 + \Delta p) - \eta_{\text{sat}}(p_0 - \Delta p)|}{2 \Delta p / p_0} \quad [\% / 100\%]$$
+
+| 扰动分类 | 参数符号 | 基准工作点 $p_0$ | 摄动步长 $\Delta p$ | 物理单位 | 排序基准指标 |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| 电流增益偏差 | $\delta_{g}$ | $0.00$ | $+0.02$ | - ($2\%$) | $\Delta \eta_{\text{sat}}$ 退化百分比 |
+| 霍尔电流零漂 | $i_{\text{bias}}$ | $0.0$ | $+20.0$ | counts | $\Delta \eta_{\text{sat}} / \text{count}$ |
+| CAN 传输时滞 | $d_{\text{act}}$ | $0$ | $+2$ | ms | $\Delta \eta_{\text{sat}} / \text{ms}$ |
+| 传感位置噪声 | $\sigma_y$ | $0.0$ | $+2.0$ | $\mu\mathrm{m}$ | $\Delta \eta_{\text{sat}} / \mu\mathrm{m}$ |
+| 偏载质心偏移 | $d_{\text{load}}$ | $0.00$ | $+0.10$ | m | $\Delta \eta_{\text{sat}} / \text{m}$ |
+
+#### 4.2 凸集投影安全性有限统计检验准则 (Test C7)
+拒绝“理论必然 100% 安全”的无检验假设，设定 Monte Carlo $N=30$ 次强扰动试验，分别独立统计未投影流与投影流：
+1. **未受限估计流 $\theta_{\text{unprojected}}$ 统计**：
+   - 越界发生率：$\rho_{\text{clip}} = \frac{N(\theta_{\text{unproj}} \notin \Omega_\theta)}{N_{\text{eval}}}$；
+   - 未投影最大发散峰值：$\max |\theta_{\text{unprojected}}|$；
+2. **投影保护流 $\theta_{\text{projected}}$ 硬性断言**：
+   - 越界次数严格 $= 0$（$\theta_k \in [\theta_{\min}, \theta_{\max}]$ 逐点成立）；
+   - 非有限值（NaN / Inf）出现次数严格 $= 0$；
+   - 协方差有界性：$P_{\min} \le P_k \le P_{\max}$ 逐点成立。
+
+#### 4.3 标称对称基准虚假补偿定量判据 (Test C8)
+当被控对象完全对称（$r = 1.00, \Delta K_{f,\text{true}} = 0$）时，随机噪声与采样偏置会导致估计器产生有限幅度随机抖动。
+设定 Monte Carlo $N = 100$ 统计判据：
+- **估计值 95% 分位数门槛**：$P_{95}(|\hat{\Delta K}_f|) \le \epsilon_{\text{false}} = 1.0 \times 10^{-5}\text{ N/count}$；
+- **估计值中位数**：$\operatorname{median}(|\hat{\Delta K}_f|) \le 5.0 \times 10^{-6}\text{ N/count}$；
+- **虚假前馈增益偏离度**：$\max(|\gamma_L - 1|, |\gamma_R - 1|) \le 0.005$（即虚假重分配失衡不超过 $0.5\%$）；
+- **虚假诱导偏航力矩 RMS**：$\operatorname{RMS}(e_{T,\text{comp}}) \le 0.01\text{ Nm}$；
+- **超标时间比例**：$|\hat{\Delta K}_f| > \epsilon_{\text{false}}$ 的持续步数比例 $\le 5.0\%$。
+
+#### 4.4 随机试验 Monte Carlo 统计字段规范
+针对 Test C1、C3、C5、C8，固定基础随机种子序列：
+$$\text{Seed}(j) = 20260924 + j, \quad j = 1, 2, \dots, N$$
+CSV 结果表增加统计分布列，扩展为 **38 列架构**：
+`Case, Test_Item, Limit_Scenario, Imax_counts, Imax_Source, Param_Source, Disturbance_Type, Disturbance_Intensity, Random_Seed, Trial_Index, Delta_Kf_True, Delta_Kf_Hat_Mean, Delta_Kf_Hat_Median, Delta_Kf_Hat_P95, Delta_Kf_RMSE, KfL_Hat, KfR_Hat, gamma_L, gamma_R, Calibration_Validity, eta_ideal, eta_quant, eta_sat_mean, eta_sat_p05, RMS_T_res_base, RMS_T_res_comp, alpha_ss_base, alpha_ss_comp, base_left_sat, base_right_sat, base_total_sat, comp_left_sat, comp_right_sat, comp_total_sat, unproj_max_peak, proj_count, PE_active_ratio, Calibration_Status`。
+
+---
+
+### 5. 分阶段实施路线与准入规划 (Staged Roadmap)
+
+为确保“做一步、稳一步、证据闭环一步”，坚决不采用一揽子冒进编码，制定两阶段实施路线：
+
+#### 第一阶段：Step 3C-1（单因素扰动开环验证）
+1. **编写非理想发生器**：
    [`output/step3_adaptive_rls/step3c_apply_imperfections.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_apply_imperfections.m)
-   - 纯函数接口：输入理想/基准离线信号流，输出注入电流误差、通信延迟、传感器噪声和偏载力矩的扰动回放流。
-2. **Step 3C 综合评估与分析模块**：
-   [`output/step3_adaptive_rls/analyze_step3c_robustness.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/analyze_step3c_robustness.m)
-   - 复用 Phase 1 严格 RLS 递推与 Phase 2 静态前馈重分配分析核；
-   - 严格继承两项解耦准则：饱和率按全时段统计，抑制比 $\eta_{\mathrm{sat}}$ 按 $t \in [0.5, 2.3]\text{ s}$ 统计。
-3. **Step 3C 自动化验证主脚本**：
-   [`output/step3_adaptive_rls/verify_step3c_robustness.m`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/verify_step3c_robustness.m)
-   - 驱动 Tests C1 ~ C8 的全流程回放与自动断言；
-   - 控制台输出格式化诊断表，自动保存控制台日志 `verify_step3c_robustness.log`。
-4. **结构化评测结果表**：
-   [`output/step3_adaptive_rls/step3c_robustness_results.csv`](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step3_adaptive_rls/step3c_robustness_results.csv)
-   - 扩展 34 列字段：在 Phase 2 的 32 列基础上，增加 `Disturbance_Type` 与 `Disturbance_Intensity` 字段。
+   实现三层电流信号流、通信延时队列及高斯随机测量噪声生成器。
+2. **实施 Test C1**：电流三层误差与偏置敏感度（Monte Carlo $N=30$）；
+3. **实施 Test C2**：CAN 通信对称/非对称时滞（包含 $d_{\text{act}} > 0$ 时使用公共动力学核因果重新积分）；
+4. **实施 Test C3**：传感器高频随机噪声与 SVF 滤波信噪比门控（Monte Carlo $N=30$）。
+- **准出准则**：C1 ~ C3 运行无报错，验证 `eta_sat >= 90%` 的容错目标是否成立，生成前 3 项测试数据表与分析日志。
 
----
+#### 第二阶段：Step 3C-2（动力学耦合与多因素深度分析）
+在 Step 3C-1 通过审查并归档后，再启动：
+1. **实施 Test C4**：基于统一动力学积分的偏载惯性力矩诊断评估（记录串扰偏差）；
+2. **实施 Test C5**：极端复合恶劣工况评估（Monte Carlo $N=100$）；
+3. **实施 Test C6**：归一化龙卷风敏感度排序；
+4. **实施 Test C7**：强冲击下凸集投影安全性有限统计检验；
+5. **实施 Test C8**：标称物理对称模型的虚假补偿定量评估。
 
-### 5. 验收标准与预期物理认知
-
-1. **估计器稳定性**：
-   在所有 C1 ~ C8 测试中，估计值 $\hat{\Delta K}_f$ 必须始终保持在物理紧凑凸集 $\Omega_\theta = [-0.0026295, +0.0018465]\text{ N/count}$ 之内，协方差矩阵 $P_k$ 严禁出现负定或数值发散。
-2. **偏载串扰定量认知**：
-   若不增加偏载力矩解耦滤波，偏载 $d_{\text{load}}$ 会将刚体平动加速度信号带入偏航回归方程，预计会导致 $\hat{\Delta K}_f$ 产生不可忽略的平动加速度相关估计偏置。Step 3C 将如实定量揭示此物理串扰边界，为后续算法是否需要引入载荷质心联合辨识提供坚实的实证数据支撑。
-3. **延迟与噪声容限**：
-   在 $1\sim 2\text{ ms}$ CAN 延迟与 $2\ \mu\mathrm{m}$ 传感器噪声下，重分配补偿抑制比 $\eta_{\text{sat}}$ 预计仍能保持在 $90\%$ 以上；在更长延迟或强偏载下若性能退化，将以定量失效界限（如 `DEGRADED_BY_DELAY` 或 `DEGRADED_BY_PAYLOAD`）明确记录，绝不掩饰。
