@@ -197,14 +197,18 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
         iR_meas_delayed((dR_meas + 1):N) = iR_applied(1:(N - dR_meas));
     end
 
-    % 高斯白噪声生成
-    if cfg.sigma_i_L > 0
+    % 高斯白噪声生成 (支持预置白噪声序列以确保严格配对消融)
+    if isfield(cfg, 'z_iL') && ~isempty(cfg.z_iL)
+        v_iL = cfg.sigma_i_L * cfg.z_iL;
+    elseif cfg.sigma_i_L > 0
         v_iL = cfg.sigma_i_L * randn(N, 1);
     else
         v_iL = zeros(N, 1);
     end
 
-    if cfg.sigma_i_R > 0
+    if isfield(cfg, 'z_iR') && ~isempty(cfg.z_iR)
+        v_iR = cfg.sigma_i_R * cfg.z_iR;
+    elseif cfg.sigma_i_R > 0
         v_iR = cfg.sigma_i_R * randn(N, 1);
     else
         v_iR = zeros(N, 1);
@@ -232,14 +236,18 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
         yR_q = yR_true;
     end
 
-    % 5.2 位置高斯测量噪声
-    if cfg.sigma_y_L > 0
+    % 5.2 位置高斯测量噪声 (支持预置白噪声序列以确保严格配对消融)
+    if isfield(cfg, 'z_yL') && ~isempty(cfg.z_yL)
+        v_yL = cfg.sigma_y_L * cfg.z_yL;
+    elseif cfg.sigma_y_L > 0
         v_yL = cfg.sigma_y_L * randn(N, 1);
     else
         v_yL = zeros(N, 1);
     end
 
-    if cfg.sigma_y_R > 0
+    if isfield(cfg, 'z_yR') && ~isempty(cfg.z_yR)
+        v_yR = cfg.sigma_y_R * cfg.z_yR;
+    elseif cfg.sigma_y_R > 0
         v_yR = cfg.sigma_y_R * randn(N, 1);
     else
         v_yR = zeros(N, 1);

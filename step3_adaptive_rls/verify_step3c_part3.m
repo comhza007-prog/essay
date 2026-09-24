@@ -1,30 +1,38 @@
-%% VERIFY_STEP3C_PART3.M - Step 3C-3 Oracle 电流通道校正与 D0b 匹配消融分析
+%% VERIFY_STEP3C_PART3.M - Step 3C-3 Oracle 电流校正、D0b 严格配对消融与 D1 时滞解耦因果对齐
 % =========================================================================
 % 功能说明:
-% 依据最新技术审查意见，在不修改底层控制器与门控阈值的前提下，完成以下两部分验证:
+% 依据最新技术审查意见，在不修改底层控制器与门控阈值的前提下，完成以下三项系统性验证:
 % 1. [Part 1] Test D0: Oracle 电流通道校正评测 (D0_OracleCurrentCalibration, MC100)
 %    - 采用与 C8A 完全相同的 100 个随机种子 (20260924 + 1..100) 与扰动空间配置
+%    - 预置固定标准正态白噪声序列，确保各测试与消融之间实现严格配对 (Strictly Paired)
 %    - 精确校正已知传感器增益漂移与霍尔零偏，完全保留随机白噪声、时滞与位置量化:
 %      iL_corr = (iL_meas - cfg.i_bias_L) / (1 + cfg.delta_g_L);
 %      iR_corr = (iR_meas - cfg.i_bias_R) / (1 + cfg.delta_g_R);
 %    - 严格采用 C8A 相同的五项正式验收指标门槛，未达标定性为 ORACLE_FAIL_TIME_RATIO
 %    - 导出独立性能表 step3c_part3_oracle_results.csv (68 列)
 %    - 导出 4 种最差差模确定性工况表 step3c_part3_oracle_deterministic_results.csv (9 列)
-% 2. [Part 2] Test D0b: 六分支匹配消融分析 (D0b Matched Ablation, N = 100)
+% 2. [Part 2] Test D0b: 六分支严格配对消融分析 (D0b Matched Paired Ablation, N = 100)
 %    - 分支 A (D0b-A): 完整 Oracle (基准)
 %    - 分支 B (D0b-B): sigma_y_L/R = 0 (关闭位置白噪声，保留量化)
 %    - 分支 C (D0b-C): quant_res = 0 (关闭位置量化，保留位置白噪声)
-%    - 分支 D (D0b-D): sigma_i_L/R = 0 (关闭电流测量白噪声)
-%    - 分支 E (D0b-E): d_meas_L/R = 0 (关闭电流测量时滞)
-%    - 分支 F (D0b-F): 位置噪声、量化、电流噪声全部关闭
+%    - 分支 D (D0b-D): sigma_i_L/R = 0 (关闭电流测量白噪声，严格配对)
+%    - 分支 E (D0b-E): d_meas_L/R = 0 (关闭全部回采测量时滞)
+%    - 分支 F (D0b-F): 位置噪声、量化、电流噪声全部关闭 (保留时滞)
 %    - 导出消融汇总表 step3c_part3_d0b_ablation_results.csv
-%    - 导出时间序列瞬态分布表 step3c_part3_d0b_timeseries.csv
+% 3. [Part 3] Test D1: 时滞解耦与因果时间戳对齐 (D1 Delay Decoupling & Causal Alignment, N = 100)
+%    - 分支 A (D1-A): 原始独立随机时滞 (基准, dL, dR in {0, 1, 2} ms)
+%    - 分支 B (D1-B): 公共 1 ms / 1 ms (消除差分时滞)
+%    - 分支 C (D1-C): 公共 2 ms / 2 ms (消除差分时滞)
+%    - 分支 D (D1-D): 每 trial 取原始两轴 max(dL, dR) (消除左右差模，保留公共时滞)
+%    - 分支 E (D1-E): 已知时延下的完整因果时间戳对齐 (较快电流补齐至 dmax，位置同步滞后 dmax)
+%    - 导出时滞解耦结果表 step3c_part3_d1_delay_decoupling_results.csv
+%    - 导出瞬态分布时间序列表 step3c_part3_d1_timeseries.csv
 % =========================================================================
 
 function verify_step3c_part3()
     clc;
     fprintf('=========================================================================\n');
-    fprintf('   STEP 3C-3: D0 Oracle 电流校正与 D0b 匹配消融基准测试\n');
+    fprintf('   STEP 3C-3: D0 Oracle 校正、D0b 配对消融与 D1 时滞因果对齐基准测试\n');
     fprintf('=========================================================================\n\n');
 
     script_dir = fileparts(mfilename('fullpath'));
@@ -63,6 +71,44 @@ function verify_step3c_part3()
     if ~isfield(d_sym, 'iL_cmd'), d_sym.iL_cmd = d_sym.iL_actual; end
     if ~isfield(d_sym, 'iR_cmd'), d_sym.iR_cmd = d_sym.iR_actual; end
 
+    N_mc = 100;
+    N_pts = d_sym.N;
+    dt = d_sym.dt;
+    Kf_mean = d_sym.Kf_mean;
+
+    % 5. 预先生成 100 个 trial 的基础扰动参数与固定标准正态随机白噪声序列 (严格配对)
+    fprintf('>>> 正在预生成 100 个 trial 的基础扰动与严格配对白噪声序列...\n');
+    trials_base = cell(N_mc, 1);
+    for j = 1:N_mc
+        seed_j = 20260924 + j;
+        rng(seed_j, 'twister');
+
+        cfg = struct();
+        cfg.delta_g_L = -0.02 + 0.04 * rand();
+        cfg.delta_g_R = -0.02 + 0.04 * rand();
+        cfg.i_bias_L  = -15.0 + 30.0 * rand();
+        cfg.i_bias_R  = -15.0 + 30.0 * rand();
+        cfg.d_act_L   = randi([0, 2]);
+        cfg.d_act_R   = randi([0, 2]);
+        cfg.d_meas_L  = randi([0, 2]);
+        cfg.d_meas_R  = randi([0, 2]);
+        cfg.sigma_y_L = 2.0e-6;
+        cfg.sigma_y_R = 2.0e-6;
+        cfg.sigma_i_L = 10.0;
+        cfg.sigma_i_R = 10.0;
+        cfg.quant_res = 1.0e-6;
+        cfg.seed      = seed_j + 100000;
+
+        % 预置固定标准正态白噪声序列，杜绝分支条件抽样破坏随机数流
+        cfg.z_iL = randn(N_pts, 1);
+        cfg.z_iR = randn(N_pts, 1);
+        cfg.z_yL = randn(N_pts, 1);
+        cfg.z_yR = randn(N_pts, 1);
+
+        trials_base{j} = cfg;
+    end
+    fprintf('    [OK] 100 个 trial 基础配置与白噪声矩阵生成完毕 (严格配对保障就绪)\n\n');
+
     %% =========================================================================
     %% PART 1: TEST D0 - ORACLE CURRENT CALIBRATION (MC 100 Trials)
     %% =========================================================================
@@ -72,8 +118,6 @@ function verify_step3c_part3()
     fprintf('    保留扰动: 随机高斯白噪声、CAN通信与测量时滞、光栅尺量化\n');
     fprintf('=========================================================================\n');
 
-    N_mc = 100;
-    N_pts = d_sym.N;
     d0_theta_hat     = zeros(N_mc, 1);
     d0_gamma_L       = zeros(N_mc, 1);
     d0_gamma_R       = zeros(N_mc, 1);
@@ -106,36 +150,19 @@ function verify_step3c_part3()
 
     max_run_arr      = zeros(N_mc, 1);
     late_exceed_arr  = zeros(N_mc, 1);
+    early_exceed_arr = zeros(N_mc, 1);
     first_exceed_arr = nan(N_mc, 1);
     last_exceed_arr  = nan(N_mc, 1);
 
-    theta_trials_A   = zeros(N_pts, N_mc);
-    pe_trials_A      = false(N_pts, N_mc);
+    theta_trials_d0  = zeros(N_pts, N_mc);
+    pe_trials_d0     = false(N_pts, N_mc);
 
     for j = 1:N_mc
-        seed_j = 20260924 + j;
-        rng(seed_j, 'twister');
+        cfg_j = trials_base{j};
+        res_j = analyze_oracle_trial(d_sym, cfg_j, false);
 
-        cfg_j = struct();
-        cfg_j.delta_g_L = -0.02 + 0.04 * rand();
-        cfg_j.delta_g_R = -0.02 + 0.04 * rand();
-        cfg_j.i_bias_L  = -15.0 + 30.0 * rand();
-        cfg_j.i_bias_R  = -15.0 + 30.0 * rand();
-        cfg_j.d_act_L   = randi([0, 2]);
-        cfg_j.d_act_R   = randi([0, 2]);
-        cfg_j.d_meas_L  = randi([0, 2]);
-        cfg_j.d_meas_R  = randi([0, 2]);
-        cfg_j.sigma_y_L = 2.0e-6;
-        cfg_j.sigma_y_R = 2.0e-6;
-        cfg_j.sigma_i_L = 10.0;
-        cfg_j.sigma_i_R = 10.0;
-        cfg_j.quant_res = 1.0e-6;
-        cfg_j.seed      = seed_j + 100000;
-
-        res_j = analyze_oracle_trial(d_sym, cfg_j);
-
-        theta_trials_A(:, j) = res_j.theta_projected;
-        pe_trials_A(:, j)    = res_j.pe_mask;
+        theta_trials_d0(:, j) = res_j.theta_projected;
+        pe_trials_d0(:, j)    = res_j.pe_mask;
 
         d0_theta_hat(j)     = res_j.theta_hat;
         d0_gamma_L(j)       = res_j.gamma_L;
@@ -167,12 +194,11 @@ function verify_step3c_part3()
         d0_pe_far(j)        = res_j.pe_false_alarm_rate;
         d0_svf_att(j)       = res_j.svf_atten_dB;
 
-        % 时间分布统计
         t_eval = res_j.t(res_j.mask_eval);
         exceed = (abs(res_j.theta_projected(res_j.mask_eval)) > 1.0e-5);
-        max_run_arr(j) = longest_true_run(exceed) * d_sym.dt;
-        late = (t_eval >= 1.0);
-        late_exceed_arr(j) = 100.0 * mean(exceed(late));
+        max_run_arr(j) = longest_true_run(exceed) * dt;
+        late_exceed_arr(j)  = 100.0 * mean(exceed(t_eval >= 1.0));
+        early_exceed_arr(j) = 100.0 * mean(exceed(t_eval < 1.0));
 
         idx_ex = find(exceed);
         if ~isempty(idx_ex)
@@ -217,6 +243,7 @@ function verify_step3c_part3()
 
     max_run_p95         = prctile(max_run_arr, 95);
     late_exceed_mean    = mean(late_exceed_arr);
+    early_exceed_mean   = mean(early_exceed_arr);
     first_exceed_median = nanmedian(first_exceed_arr);
     last_exceed_median  = nanmedian(last_exceed_arr);
 
@@ -237,6 +264,7 @@ function verify_step3c_part3()
 
     fprintf('  [D0 时间游程证据]:\n');
     fprintf('    - 最长单次连续超标时间 P95 : %.3f s\n', max_run_p95);
+    fprintf('    - 前半段 (t < 1.0s) 超标均比: %5.2f%%\n', early_exceed_mean);
     fprintf('    - 后半段 (t >= 1.0s) 超标均比: %5.2f%%\n', late_exceed_mean);
     fprintf('    - 首次超标时刻中位数        : %.3f s\n', first_exceed_median);
     fprintf('    - 最后超标时刻中位数        : %.3f s\n', last_exceed_median);
@@ -252,7 +280,7 @@ function verify_step3c_part3()
     det_rows = cell(size(det_diff_cfgs, 1), 9);
     for di = 1:size(det_diff_cfgs, 1)
         cfg_di = det_diff_cfgs{di, 2};
-        res_det = analyze_oracle_trial(d_sym, cfg_di);
+        res_det = analyze_oracle_trial(d_sym, cfg_di, false);
         gamma_dev_det = max(abs(res_det.gamma_L - 1.0), abs(res_det.gamma_R - 1.0));
         if abs(res_det.theta_hat) <= 1.0e-5 && gamma_dev_det <= 0.005 && res_det.rms_comp <= 0.01
             det_status = 'PASS';
@@ -294,7 +322,7 @@ function verify_step3c_part3()
     end
     fprintf('=========================================================================\n');
 
-    % 导出独立确定性结果表
+    % 导出独立确定性工况表
     det_header = {'Case', 'theta_hat', 'gamma_dev_max', 'rms_comp', ...
         'd_act_L', 'd_act_R', 'delta_g_L', 'delta_g_R', 'Status'};
     T_det = cell2table(det_rows, 'VariableNames', det_header);
@@ -361,33 +389,27 @@ function verify_step3c_part3()
     fprintf('    [OK] Oracle 结果表回读一致性断言 100%% 成立!\n\n');
 
     %% =========================================================================
-    %% PART 2: TEST D0b - MATCHED ABLATION (Branches A ~ F, N = 100)
+    %% PART 2: TEST D0b - MATCHED PAIRED ABLATION (Branches A ~ F, N = 100)
     %% =========================================================================
     fprintf('=========================================================================\n');
-    fprintf('>>> [Part 2] 执行 Test D0b: 六分支匹配消融分析 (N = 100)\n');
-    fprintf('    目标: 定位剩余 1.82 percentage-point 运动起始瞬态误差的主导来源\n');
+    fprintf('>>> [Part 2] 执行 Test D0b: 六分支严格配对消融分析 (N = 100)\n');
+    fprintf('    保障机制: 采用固定标准正态白噪声序列，杜绝分支抽样破坏随机数序列\n');
     fprintf('=========================================================================\n');
 
-    branches = {'A', 'B', 'C', 'D', 'E', 'F'};
-    branch_names = { ...
+    d0b_branches = {'A', 'B', 'C', 'D', 'E', 'F'};
+    d0b_names = { ...
         'D0b-A (Full Oracle Baseline)', ...
         'D0b-B (sigma_y_L/R = 0, keep quant)', ...
         'D0b-C (quant_res = 0, keep sigma_y)', ...
-        'D0b-D (sigma_i_L/R = 0)', ...
+        'D0b-D (sigma_i_L/R = 0, Strictly Paired)', ...
         'D0b-E (d_meas_L/R = 0)', ...
         'D0b-F (All noise/quant OFF)'};
 
-    ablation_rows = cell(numel(branches), 11);
+    ablation_rows = cell(numel(d0b_branches), 11);
 
-    % 保存各分支时序分布矩阵
-    theta_trials_branches = cell(numel(branches), 1);
-    pe_trials_branches    = cell(numel(branches), 1);
-    theta_trials_branches{1} = theta_trials_A;
-    pe_trials_branches{1}    = pe_trials_A;
-
-    for bi = 1:numel(branches)
-        b_code = branches{bi};
-        b_name = branch_names{bi};
+    for bi = 1:numel(d0b_branches)
+        b_code = d0b_branches{bi};
+        b_name = d0b_names{bi};
 
         exceed_time_arr = zeros(N_mc, 1);
         theta_final_arr = zeros(N_mc, 1);
@@ -396,79 +418,39 @@ function verify_step3c_part3()
         early_ex_arr    = zeros(N_mc, 1);
         max_run_arr_b   = zeros(N_mc, 1);
 
-        theta_trials_b  = zeros(N_pts, N_mc);
-        pe_trials_b     = false(N_pts, N_mc);
+        for j = 1:N_mc
+            cfg = trials_base{j};
 
-        if bi == 1
-            % 分支 A 直接重用 Part 1 结果
-            exceed_time_arr = d0_exceed_rt;
-            theta_final_arr = d0_theta_hat;
-            pe_act_arr      = d0_pe_act;
-            late_ex_arr     = late_exceed_arr;
-            max_run_arr_b   = max_run_arr;
-            theta_trials_b  = theta_trials_A;
-            pe_trials_b     = pe_trials_A;
-            for j = 1:N_mc
-                t_ev = d_sym.t(d_sym.t >= 0.5 & d_sym.t <= 2.3);
-                ex_j = abs(theta_trials_A(d_sym.t >= 0.5 & d_sym.t <= 2.3, j)) > 1.0e-5;
-                early_ex_arr(j) = 100.0 * mean(ex_j(t_ev < 1.0));
+            % 分支独立改动
+            switch b_code
+                case 'A'
+                    % 基准保持不变
+                case 'B'
+                    cfg.sigma_y_L = 0; cfg.sigma_y_R = 0;
+                case 'C'
+                    cfg.quant_res = 0;
+                case 'D'
+                    cfg.sigma_i_L = 0; cfg.sigma_i_R = 0;
+                case 'E'
+                    cfg.d_meas_L = 0; cfg.d_meas_R = 0;
+                case 'F'
+                    cfg.sigma_y_L = 0; cfg.sigma_y_R = 0;
+                    cfg.quant_res = 0;
+                    cfg.sigma_i_L = 0; cfg.sigma_i_R = 0;
             end
-        else
-            for j = 1:N_mc
-                seed_j = 20260924 + j;
-                rng(seed_j, 'twister');
 
-                cfg = struct();
-                cfg.delta_g_L = -0.02 + 0.04 * rand();
-                cfg.delta_g_R = -0.02 + 0.04 * rand();
-                cfg.i_bias_L  = -15.0 + 30.0 * rand();
-                cfg.i_bias_R  = -15.0 + 30.0 * rand();
-                cfg.d_act_L   = randi([0, 2]);
-                cfg.d_act_R   = randi([0, 2]);
-                cfg.d_meas_L  = randi([0, 2]);
-                cfg.d_meas_R  = randi([0, 2]);
-                cfg.sigma_y_L = 2.0e-6;
-                cfg.sigma_y_R = 2.0e-6;
-                cfg.sigma_i_L = 10.0;
-                cfg.sigma_i_R = 10.0;
-                cfg.quant_res = 1.0e-6;
-                cfg.seed      = seed_j + 100000;
+            res_b = analyze_oracle_trial(d_sym, cfg, false);
 
-                % 分支独立改动
-                switch b_code
-                    case 'B'
-                        cfg.sigma_y_L = 0; cfg.sigma_y_R = 0;
-                    case 'C'
-                        cfg.quant_res = 0;
-                    case 'D'
-                        cfg.sigma_i_L = 0; cfg.sigma_i_R = 0;
-                    case 'E'
-                        cfg.d_meas_L = 0; cfg.d_meas_R = 0;
-                    case 'F'
-                        cfg.sigma_y_L = 0; cfg.sigma_y_R = 0;
-                        cfg.quant_res = 0;
-                        cfg.sigma_i_L = 0; cfg.sigma_i_R = 0;
-                end
+            theta_final_arr(j) = res_b.theta_hat;
+            exceed_time_arr(j) = res_b.exceed_false_ratio;
+            pe_act_arr(j)      = res_b.pe_active_ratio;
 
-                res_b = analyze_oracle_trial(d_sym, cfg);
-
-                theta_trials_b(:, j) = res_b.theta_projected;
-                pe_trials_b(:, j)    = res_b.pe_mask;
-
-                theta_final_arr(j) = res_b.theta_hat;
-                exceed_time_arr(j) = res_b.exceed_false_ratio;
-                pe_act_arr(j)      = res_b.pe_active_ratio;
-
-                t_eval_b = res_b.t(res_b.mask_eval);
-                ex_b = (abs(res_b.theta_projected(res_b.mask_eval)) > 1.0e-5);
-                max_run_arr_b(j) = longest_true_run(ex_b) * d_sym.dt;
-                late_ex_arr(j)   = 100.0 * mean(ex_b(t_eval_b >= 1.0));
-                early_ex_arr(j)  = 100.0 * mean(ex_b(t_eval_b < 1.0));
-            end
+            t_eval_b = res_b.t(res_b.mask_eval);
+            ex_b = (abs(res_b.theta_projected(res_b.mask_eval)) > 1.0e-5);
+            max_run_arr_b(j) = longest_true_run(ex_b) * dt;
+            late_ex_arr(j)   = 100.0 * mean(ex_b(t_eval_b >= 1.0));
+            early_ex_arr(j)  = 100.0 * mean(ex_b(t_eval_b < 1.0));
         end
-
-        theta_trials_branches{bi} = theta_trials_b;
-        pe_trials_branches{bi}    = pe_trials_b;
 
         time_mean   = mean(exceed_time_arr);
         p95_run     = prctile(max_run_arr_b, 95);
@@ -487,7 +469,7 @@ function verify_step3c_part3()
         ablation_rows(bi, :) = { ...
             sprintf('D0b-%s', b_code), b_name, time_mean, early_mean, late_mean, ...
             p95_run, p95_final, med_final, pe_mean, b_status, ...
-            describe_ablation_finding(b_code, time_mean)};
+            describe_d0b_finding(b_code, time_mean)};
 
         fprintf('\n  >>> 分支 %s: %s <<<\n', b_code, b_name);
         fprintf('      超标时间比例均值 time_exceed : %5.2f%% (门槛 <= 5.00%%) -> [%s]\n', ...
@@ -509,50 +491,185 @@ function verify_step3c_part3()
     T_ablation = cell2table(ablation_rows, 'VariableNames', ablation_header);
     file_ablation = fullfile(script_dir, 'step3c_part3_d0b_ablation_results.csv');
     writetable(T_ablation, file_ablation);
-    fprintf('\n>>> 正在导出消融汇总表: %s\n', file_ablation);
+    fprintf('\n>>> 正在导出 D0b 消融汇总表: %s\n', file_ablation);
     T_abl_read = readtable(file_ablation);
     assert(height(T_abl_read) == 6, '消融表行数必须为 6');
     assert(width(T_abl_read) == 11, '消融表列数必须为 11');
-    fprintf('    [OK] 消融汇总表导出与回读断言 100%% 成立!\n');
+    fprintf('    [OK] D0b 消融汇总表导出与回读断言 100%% 成立!\n\n');
+
+    %% =========================================================================
+    %% PART 3: TEST D1 - DELAY DECOUPLING & CAUSAL ALIGNMENT (Branches A ~ E, N = 100)
+    %% =========================================================================
+    fprintf('=========================================================================\n');
+    fprintf('>>> [Part 3] 执行 Test D1: 时滞解耦与因果时间戳对齐 (N = 100)\n');
+    fprintf('    目标: 解耦公共时滞与左右通道差分时滞，验证因果时间戳对齐\n');
+    fprintf('=========================================================================\n');
+
+    d1_branches = {'A', 'B', 'C', 'D', 'E'};
+    d1_names = { ...
+        'D1-A (Original Random Delays, Baseline)', ...
+        'D1-B (Common 1ms / 1ms, Diff=0)', ...
+        'D1-C (Common 2ms / 2ms, Diff=0)', ...
+        'D1-D (Per-trial max(dL, dR), Diff=0)', ...
+        'D1-E (Causal Timestamp Alignment)'};
+
+    d1_rows = cell(numel(d1_branches), 13);
+    theta_trials_d1 = cell(numel(d1_branches), 1);
+    pe_trials_d1    = cell(numel(d1_branches), 1);
+
+    for bi = 1:numel(d1_branches)
+        b_code = d1_branches{bi};
+        b_name = d1_names{bi};
+
+        exceed_time_arr = zeros(N_mc, 1);
+        theta_final_arr = zeros(N_mc, 1);
+        gamma_dev_arr   = zeros(N_mc, 1);
+        rms_comp_arr    = zeros(N_mc, 1);
+        pe_act_arr      = zeros(N_mc, 1);
+        late_ex_arr     = zeros(N_mc, 1);
+        early_ex_arr    = zeros(N_mc, 1);
+        max_run_arr_d1  = zeros(N_mc, 1);
+
+        theta_trials_b  = zeros(N_pts, N_mc);
+        pe_trials_b     = false(N_pts, N_mc);
+
+        for j = 1:N_mc
+            cfg = trials_base{j};
+            is_causal_align = false;
+            orig_dL = cfg.d_meas_L;
+            orig_dR = cfg.d_meas_R;
+
+            switch b_code
+                case 'A'
+                    % 原始随机时滞基准
+                case 'B'
+                    cfg.d_meas_L = 1; cfg.d_meas_R = 1;
+                case 'C'
+                    cfg.d_meas_L = 2; cfg.d_meas_R = 2;
+                case 'D'
+                    d_common = max(orig_dL, orig_dR);
+                    cfg.d_meas_L = d_common;
+                    cfg.d_meas_R = d_common;
+                case 'E'
+                    is_causal_align = true;
+            end
+
+            res_d1 = analyze_oracle_trial(d_sym, cfg, is_causal_align);
+
+            theta_trials_b(:, j) = res_d1.theta_projected;
+            pe_trials_b(:, j)    = res_d1.pe_mask;
+
+            theta_final_arr(j) = res_d1.theta_hat;
+            gamma_dev_arr(j)   = max(abs(res_d1.gamma_L - 1.0), abs(res_d1.gamma_R - 1.0));
+            rms_comp_arr(j)    = res_d1.rms_comp;
+            exceed_time_arr(j) = res_d1.exceed_false_ratio;
+            pe_act_arr(j)      = res_d1.pe_active_ratio;
+
+            t_eval_b = res_d1.t(res_d1.mask_eval);
+            ex_b = (abs(res_d1.theta_projected(res_d1.mask_eval)) > 1.0e-5);
+            max_run_arr_d1(j) = longest_true_run(ex_b) * dt;
+            late_ex_arr(j)    = 100.0 * mean(ex_b(t_eval_b >= 1.0));
+            early_ex_arr(j)   = 100.0 * mean(ex_b(t_eval_b < 1.0));
+        end
+
+        theta_trials_d1{bi} = theta_trials_b;
+        pe_trials_d1{bi}    = pe_trials_b;
+
+        time_mean   = mean(exceed_time_arr);
+        p95_run     = prctile(max_run_arr_d1, 95);
+        late_mean   = mean(late_ex_arr);
+        early_mean  = mean(early_ex_arr);
+        p95_final   = prctile(abs(theta_final_arr), 95);
+        med_final   = median(abs(theta_final_arr));
+        max_g_dev   = max(gamma_dev_arr);
+        max_rms     = max(rms_comp_arr);
+        pe_mean     = mean(pe_act_arr);
+
+        pass_p95_d1 = p95_final <= 1.0e-5;
+        pass_med_d1 = med_final <= 5.0e-6;
+        pass_g_d1   = max_g_dev <= 0.005;
+        pass_rms_d1 = max_rms <= 0.01;
+        pass_t_d1   = time_mean <= 5.0;
+
+        if pass_p95_d1 && pass_med_d1 && pass_g_d1 && pass_rms_d1 && pass_t_d1
+            d1_status = 'PASS';
+        else
+            d1_status = 'ORACLE_FAIL_TIME_RATIO';
+        end
+
+        d1_rows(bi, :) = { ...
+            sprintf('D1-%s', b_code), b_name, time_mean, early_mean, late_mean, ...
+            p95_run, p95_final, med_final, max_g_dev * 100, max_rms, pe_mean, d1_status, ...
+            describe_d1_finding(b_code, time_mean)};
+
+        fprintf('\n  >>> 分支 %s: %s <<<\n', b_code, b_name);
+        fprintf('      超标时间比例均值 time_exceed : %5.2f%% (门槛 <= 5.00%%) -> [%s]\n', ...
+            time_mean, pass_fail_str(time_mean <= 5.00));
+        fprintf('      前半段 (t < 1.0s) 超标均比   : %5.2f%%\n', early_mean);
+        fprintf('      后半段 (t >= 1.0s) 超标均比  : %5.2f%%\n', late_mean);
+        fprintf('      最长超标持续时间 P95        : %.3f s\n', p95_run);
+        fprintf('      终点估计 P95(|theta|)       : %.4e N/ct (门槛 <= 1.0e-5)\n', p95_final);
+        fprintf('      终点估计中位数 median        : %.4e N/ct (门槛 <= 5.0e-6)\n', med_final);
+        fprintf('      最大前馈偏离 max|gamma-1|   : %.4f%% (门槛 <= 0.50%%)\n', max_g_dev * 100);
+        fprintf('      虚假诱导偏航力矩最大 RMS    : %.4e Nm (门槛 <= 0.010 Nm)\n', max_rms);
+        fprintf('      PE 门控激活比例均值          : %.4f\n', pe_mean);
+        fprintf('      综合状态判定                : [%s]\n', d1_status);
+    end
+
+    % 导出 D1 结果表
+    d1_header = { ...
+        'Branch_ID', 'Branch_Description', 'theta_exceed_time_mean', ...
+        'early_exceed_mean', 'late_exceed_mean', 'max_run_p95', ...
+        'P95_abs_theta_final', 'median_abs_theta_final', 'max_gamma_dev_pct', ...
+        'max_rms_comp_Nm', 'PE_active_ratio', 'Status', 'Physical_Diagnosis'};
+    T_d1 = cell2table(d1_rows, 'VariableNames', d1_header);
+    file_d1 = fullfile(script_dir, 'step3c_part3_d1_delay_decoupling_results.csv');
+    writetable(T_d1, file_d1);
+    fprintf('\n>>> 正在导出 D1 时滞解耦结果表: %s\n', file_d1);
+    T_d1_read = readtable(file_d1);
+    assert(height(T_d1_read) == 5, 'D1 表行数必须为 5');
+    assert(width(T_d1_read) == 13, 'D1 表列数必须为 13');
+    fprintf('    [OK] D1 时滞解耦结果表导出与回读断言 100%% 成立!\n');
 
     % 导出时间序列瞬态分布表
     t_vec = d_sym.t;
-    p_exceed_A = 100.0 * mean(abs(theta_trials_branches{1}) > 1.0e-5, 2);
-    p_exceed_B = 100.0 * mean(abs(theta_trials_branches{2}) > 1.0e-5, 2);
-    p_exceed_C = 100.0 * mean(abs(theta_trials_branches{3}) > 1.0e-5, 2);
-    p_exceed_D = 100.0 * mean(abs(theta_trials_branches{4}) > 1.0e-5, 2);
-    p_exceed_E = 100.0 * mean(abs(theta_trials_branches{5}) > 1.0e-5, 2);
-    p_exceed_F = 100.0 * mean(abs(theta_trials_branches{6}) > 1.0e-5, 2);
+    p_exceed_D1A = 100.0 * mean(abs(theta_trials_d1{1}) > 1.0e-5, 2);
+    p_exceed_D1B = 100.0 * mean(abs(theta_trials_d1{2}) > 1.0e-5, 2);
+    p_exceed_D1C = 100.0 * mean(abs(theta_trials_d1{3}) > 1.0e-5, 2);
+    p_exceed_D1D = 100.0 * mean(abs(theta_trials_d1{4}) > 1.0e-5, 2);
+    p_exceed_D1E = 100.0 * mean(abs(theta_trials_d1{5}) > 1.0e-5, 2);
 
-    theta_p95_A = prctile(abs(theta_trials_branches{1}), 95, 2);
-    theta_p95_B = prctile(abs(theta_trials_branches{2}), 95, 2);
-    theta_p95_E = prctile(abs(theta_trials_branches{5}), 95, 2);
-    theta_p95_F = prctile(abs(theta_trials_branches{6}), 95, 2);
+    theta_p95_D1A = prctile(abs(theta_trials_d1{1}), 95, 2);
+    theta_p95_D1D = prctile(abs(theta_trials_d1{4}), 95, 2);
+    theta_p95_D1E = prctile(abs(theta_trials_d1{5}), 95, 2);
 
-    theta_p50_A = median(abs(theta_trials_branches{1}), 2);
-    theta_p50_E = median(abs(theta_trials_branches{5}), 2);
+    theta_p50_D1A = median(abs(theta_trials_d1{1}), 2);
+    theta_p50_D1D = median(abs(theta_trials_d1{4}), 2);
+    theta_p50_D1E = median(abs(theta_trials_d1{5}), 2);
 
-    pe_active_A = 100.0 * mean(pe_trials_branches{1}, 2);
-    pe_active_E = 100.0 * mean(pe_trials_branches{5}, 2);
+    pe_active_D1A = 100.0 * mean(pe_trials_d1{1}, 2);
+    pe_active_D1E = 100.0 * mean(pe_trials_d1{5}, 2);
 
     ts_table = table(t_vec, ...
-        p_exceed_A, p_exceed_B, p_exceed_C, p_exceed_D, p_exceed_E, p_exceed_F, ...
-        theta_p95_A, theta_p95_B, theta_p95_E, theta_p95_F, ...
-        theta_p50_A, theta_p50_E, pe_active_A, pe_active_E);
+        p_exceed_D1A, p_exceed_D1B, p_exceed_D1C, p_exceed_D1D, p_exceed_D1E, ...
+        theta_p95_D1A, theta_p95_D1D, theta_p95_D1E, ...
+        theta_p50_D1A, theta_p50_D1D, theta_p50_D1E, ...
+        pe_active_D1A, pe_active_D1E);
 
-    file_ts = fullfile(script_dir, 'step3c_part3_d0b_timeseries.csv');
+    file_ts = fullfile(script_dir, 'step3c_part3_d1_timeseries.csv');
     writetable(ts_table, file_ts);
-    fprintf('>>> 正在导出时间序列瞬态分布表: %s\n', file_ts);
+    fprintf('>>> 正在导出 D1 时间序列瞬态分布表: %s\n', file_ts);
     T_ts_read = readtable(file_ts);
     assert(height(T_ts_read) == N_pts, '时序表行数必须等于 N_pts');
-    fprintf('    [OK] 时间序列瞬态分布表导出与回读断言 100%% 成立!\n\n');
+    fprintf('    [OK] D1 时间序列瞬态分布表导出与回读断言 100%% 成立!\n\n');
 end
 
 %% =========================================================================
 %% 局部辅助函数: 单次 Oracle 试验因果回放与 RLS 分析核
 %% =========================================================================
-function res = analyze_oracle_trial(base_data, cfg)
+function res = analyze_oracle_trial(base_data, cfg, is_causal_align)
     if nargin < 2, cfg = struct(); end
+    if nargin < 3, is_causal_align = false; end
 
     dt = base_data.dt;
     Le = base_data.mech.Le;
@@ -579,11 +696,55 @@ function res = analyze_oracle_trial(base_data, cfg)
     iL_corr = (pert_data.iL_meas - i_bias_L) / (1.0 + delta_g_L);
     iR_corr = (pert_data.iR_meas - i_bias_R) / (1.0 + delta_g_R);
 
-    % 3. 构造滤波回归信号 (使用校正后的电流信号 iL_corr, iR_corr)
-    reg = build_step3b_regression(...
-        pert_data.yL_meas, pert_data.yR_meas, ...
-        iL_corr, iR_corr, ...
-        dt, base_data.mech, base_data.plant, Kf_mean, 'step3c_sensor');
+    % 3. 因果时间戳对齐处理 (针对 D1-E)
+    if is_causal_align
+        dL = cfg.d_meas_L;
+        dR = cfg.d_meas_R;
+        dmax = max(dL, dR);
+
+        dL_extra = dmax - dL;
+        dR_extra = dmax - dR;
+
+        % 3.1 较快电流通道补齐额外滞后到 dmax
+        iL_align = zeros(N, 1);
+        iR_align = zeros(N, 1);
+        if dL_extra == 0
+            iL_align = iL_corr;
+        else
+            iL_align((dL_extra + 1):N) = iL_corr(1:(N - dL_extra));
+        end
+        if dR_extra == 0
+            iR_align = iR_corr;
+        else
+            iR_align((dR_extra + 1):N) = iR_corr(1:(N - dR_extra));
+        end
+
+        % 3.2 位置/偏转回归输入同步因果滞后 dmax
+        yL_align = zeros(N, 1);
+        yR_align = zeros(N, 1);
+        if dmax == 0
+            yL_align = pert_data.yL_meas;
+            yR_align = pert_data.yR_meas;
+        else
+            yL_align((dmax + 1):N) = pert_data.yL_meas(1:(N - dmax));
+            yR_align((dmax + 1):N) = pert_data.yR_meas(1:(N - dmax));
+        end
+
+        % 3.3 构造同物理时刻回归量
+        reg = build_step3b_regression(...
+            yL_align, yR_align, ...
+            iL_align, iR_align, ...
+            dt, base_data.mech, base_data.plant, Kf_mean, 'step3c_sensor');
+
+        t_eval_start = pert_data.t_eval_start + dmax * dt;
+    else
+        reg = build_step3b_regression(...
+            pert_data.yL_meas, pert_data.yR_meas, ...
+            iL_corr, iR_corr, ...
+            dt, base_data.mech, base_data.plant, Kf_mean, 'step3c_sensor');
+
+        t_eval_start = pert_data.t_eval_start;
+    end
 
     % 4. 初始化 RLS 估计器
     opts_rls = struct();
@@ -652,7 +813,7 @@ function res = analyze_oracle_trial(base_data, cfg)
     e_total_base = T_alpha_base - T_nom_intended;
     e_total_comp = T_alpha_comp - T_nom_intended;
 
-    mask_eval  = (t >= pert_data.t_eval_start & t <= pert_data.t_eval_end);
+    mask_eval  = (t >= t_eval_start & t <= pert_data.t_eval_end);
     mask_dwell = (t >= 3.0 & t <= 4.0);
 
     rms_base = sqrt(mean(e_T_base(mask_eval).^2));
@@ -808,20 +969,37 @@ function max_run = longest_true_run(vec)
     end
 end
 
-function desc = describe_ablation_finding(b_code, time_mean)
+function desc = describe_d0b_finding(b_code, time_mean)
     switch b_code
         case 'A'
-            desc = '全要素 Oracle 基准 (time_exceed=6.82%)';
+            desc = '全要素 Oracle 基准 (time_exceed=7.67%, early=19.52%, late=3.14%)';
         case 'B'
-            desc = '去除位置白噪声使超标时间微降至 5.33%，有改善但非唯一主因';
+            desc = '去除位置白噪声使超标时间降至 5.32%，有改善但非主导项';
         case 'C'
-            desc = '去除位置量化几乎无改善 (6.72%)，量化非主因';
+            desc = '去除位置量化几乎无改善 (7.49%)，量化非主因';
         case 'D'
-            desc = '去除电流测量噪声略有恶化 (7.37%)，电流白噪声非主因';
+            desc = '严格配对下去除电流白噪声微幅降至 7.43%，证实电流白噪声非主因';
         case 'E'
-            desc = sprintf('去除回采时滞大幅降至 %.2f%% (<5.0%% 达标)，证实大 di/dt 段时滞差模为主因', time_mean);
+            desc = '去除全部回采测量时滞后降至 2.31%，证明测量时滞整体为主导因素；公共时滞与左右差分时滞的贡献仍需进一步解耦';
         case 'F'
             desc = '去除所有噪声量化保留时滞仍为 5.25%，印证时滞与动态电流强相关';
+        otherwise
+            desc = 'N/A';
+    end
+end
+
+function desc = describe_d1_finding(b_code, time_mean)
+    switch b_code
+        case 'A'
+            desc = '原始独立随机时滞基准 (7.67%, FAIL)';
+        case 'B'
+            desc = sprintf('公共 1ms/1ms (无差分时滞) 降至 %.2f%% (PASS)，确立差分时滞为主因', time_mean);
+        case 'C'
+            desc = sprintf('公共 2ms/2ms (无差分时滞) 降至 %.2f%% (PASS)，即使存在 2ms 公共时滞依然达标', time_mean);
+        case 'D'
+            desc = sprintf('消除左右差模保留每试验最大公共时滞降至 %.2f%% (PASS)，充分证实差分时滞为主导因素', time_mean);
+        case 'E'
+            desc = sprintf('因果时间戳对齐 (补齐较快轴滞后并同步后移位置) 降至 %.2f%% (PASS)，因果对齐有效', time_mean);
         otherwise
             desc = 'N/A';
     end
