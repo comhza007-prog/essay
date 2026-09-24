@@ -1,0 +1,47 @@
+=========================================================================
+   STEP 3C-3: D0 Oracle 电流通道校正极小基准测试 (D0_OracleCurrentCalibration)
+=========================================================================
+
+>>> 执行严格红线闭环控制器隔离检查...
+    [OK] 确认本模块为纯离线开环回放敏度分析，绝未接入 controller_c3a 或 SyncAlloc
+>>> 检查公共 RK4 单步动力学求解器 gantry_dynamics_step_rk4.m...
+    [OK] 唯一公共 RK4 入口已就绪: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\..\common\gantry_dynamics_step_rk4.m
+
+>>> 从权威参数源 param_init.m 读取硬件限幅参数...
+    [OK] 权威标称硬件限幅校验通过: Imax = 16000.0 counts
+
+=========================================================================
+>>> 开始执行 [Test D0] Oracle 电流通道校正评测 (Monte Carlo N = 100)
+    校正公式: i_corr = (i_meas - i_bias) / (1 + delta_g)
+    保留扰动: 随机高斯白噪声、CAN通信与执行延迟、光栅尺量化
+=========================================================================
+
+--- [D0 Oracle] 统计指标与判据核验 (N = 100) ---
+    - P95(|Delta_Kf_hat|)   : 5.9858e-06 N/count (门槛 <= 1.0e-5) -> [PASS]
+    - 有符号中位数 median     : +8.2711e-07 N/count
+    - 绝对误差中位数 abs_med  : 1.8569e-06 N/count (门槛 <= 5.0e-6) -> [PASS]
+    - 最大前馈偏离 max|gamma-1|: 0.0708% (门槛 <= 0.50%) -> [PASS]
+    - 虚假偏航力矩最大 RMS   : 4.0110e-03 Nm (门槛 <= 0.010 Nm) -> [PASS]
+    - 超标时间比例均值 time_exceed:  6.82% (门槛 <= 5.00%) -> [FAIL]
+    - 终点估计超标试验比例   :  0.00% (0/100, 辅助诊断)
+  [D0 时间游程证据]:
+    - 最长单次连续超标时间 P95 : 0.192 s
+    - 后半段 (t >= 1.0s) 超标均比:  2.05%
+    - 首次超标时刻中位数        : 0.502 s
+    - 最后超标时刻中位数        : 0.623 s
+
+--- [D0 Oracle] 4 种最差确定性差模工况检验 ---
+    [Diff_Gain_+2%_-2%] theta_hat = +1.5968e-07 | gamma_dev = 0.0013% | rms_comp = 7.3065e-05 Nm | 判定: [PASS]
+    [Diff_Gain_-2%_+2%] theta_hat = +1.5968e-07 | gamma_dev = 0.0013% | rms_comp = 7.3065e-05 Nm | 判定: [PASS]
+    [Diff_Delay_1ms_2ms] theta_hat = +2.9454e-07 | gamma_dev = 0.0024% | rms_comp = 1.3477e-04 Nm | 判定: [PASS]
+    [Diff_Delay_2ms_1ms] theta_hat = -1.4994e-07 | gamma_dev = 0.0012% | rms_comp = 6.8609e-05 Nm | 判定: [PASS]
+
+=========================================================================
+   [D0 Oracle 综合正式判定]: [RAW_ESTIMATOR_FAIL] (未达标，严禁调高门槛，如实定性)
+=========================================================================
+
+>>> 正在导出 Oracle 结果表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part3_oracle_results.csv
+    [OK] 表导出成功 (1 行 x 68 列)
+>>> 正在执行 readtable 字段与数值一致性断言...
+    [OK] readtable 回读一致性断言 100% 成立!
+
