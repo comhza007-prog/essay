@@ -183,17 +183,20 @@
     A-D配对改善均值: 4.627 percentage points
     A-D配对改善中位数: 5.081 percentage points
     A-D配对改善 P05/P95: [-0.278, 14.270] percentage points
-    A-D改善比例: 60.0% trials
+    A-D全体改善比例: 60.0% trials
+    非零差模试验改善比例: 90.9% (60/66)
+    零差模A/D最大差异: 0.0000e+00 pp
 
---- [D1 时延差剂量响应分析 (|dL - dR| 分组)] ---
-|dL-dR|=0 ms: A=5.332%, D=5.332%, N=34
-|dL-dR|=1 ms: A=6.848%, D=1.524%, N=50
-|dL-dR|=2 ms: A=15.689%, D=3.411%, N=16
+--- [D1 时延差分层统计 (|dL - dR| 分组)] ---
+|dL-dR|=0 steps (0.0 ms): A=5.332%, D=5.332%, N=34
+|dL-dR|=1 steps (1.0 ms): A=6.848%, D=1.524%, N=50
+|dL-dR|=2 steps (2.0 ms): A=15.689%, D=3.411%, N=16
 
 --- [D1-A vs D1-D 回归信号差异程序化统计 (t in [0.5, 0.8]s)] ---
-    - RMS(delta_y)   : 3.1638e-02
-    - P95(|delta_y|) : 7.3591e-02
-    - RMS(delta_phi) : 2.5523e+00
+    - RMS(delta_y)   : 3.1638e-02 N*m
+    - P95(|delta_y|) : 7.3591e-02 N*m
+    - RMS(delta_phi) : 2.5523e+00 count*m
+    [说明] 在对称真值 Delta_Kf*=0 下，y_f 等于零参数假设下的表观回归残差。
 >>> 正在导出 D1 逐试验明细表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part3_d1_trial_results.csv
     [OK] D1 逐试验明细表导出与回读断言 100% 成立!
 >>> 正在导出 D1 时间序列瞬态分布表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part3_d1_timeseries.csv

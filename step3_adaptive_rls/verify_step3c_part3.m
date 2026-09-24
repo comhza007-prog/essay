@@ -687,21 +687,34 @@ function verify_step3c_part3()
     fprintf('    A-D配对改善均值: %.3f percentage points\n', paired_mean_AD);
     fprintf('    A-D配对改善中位数: %.3f percentage points\n', paired_median_AD);
     fprintf('    A-D配对改善 P05/P95: [%.3f, %.3f] percentage points\n', paired_p05_AD, paired_p95_AD);
-    fprintf('    A-D改善比例: %.1f%% trials\n', improved_ratio);
+    fprintf('    A-D全体改善比例: %.1f%% trials\n', improved_ratio);
     assert(paired_mean_AD > 0, 'D1-D没有产生正向平均改善');
 
-    % D1 时延差剂量响应分析 (|dL - dR| 分组)
-    fprintf('\n--- [D1 时延差剂量响应分析 (|dL - dR| 分组)] ---\n');
-    delay_skew = zeros(N_mc, 1);
-    for j = 1:N_mc
-        c = trials_base{j};
-        delay_skew(j) = abs(c.d_meas_L - c.d_meas_R); % 单位 ms，因为 dt=1 ms
-    end
+    % 程序化闭环校验: 非零差模试验改善率与零差模严格一致性
+    delay_skew_samples = cellfun(@(c) abs(c.d_meas_L - c.d_meas_R), trials_base);
+    delay_skew_samples = delay_skew_samples(:);
+    idx_nonzero = delay_skew_samples > 0;
+    idx_zero    = ~idx_nonzero;
 
-    for skew = 0:2
-        idx = (delay_skew == skew);
-        fprintf('|dL-dR|=%d ms: A=%.3f%%, D=%.3f%%, N=%d\n', ...
-            skew, mean(d1_exceed_trials(idx, 1)), ...
+    improved_ratio_nonzero = 100 * mean(delta_AD(idx_nonzero) > 0);
+    zero_skew_max_diff = max(abs(delta_AD(idx_zero)));
+
+    fprintf('    非零差模试验改善比例: %.1f%% (%d/%d)\n', ...
+        improved_ratio_nonzero, sum(delta_AD(idx_nonzero) > 0), sum(idx_nonzero));
+    fprintf('    零差模A/D最大差异: %.4e pp\n', zero_skew_max_diff);
+
+    assert(improved_ratio_nonzero >= 80.0, ...
+        '非零差模试验改善比例未达到80%');
+    assert(zero_skew_max_diff <= 1e-12, ...
+        '零差模试验中D1-A与D1-D未严格一致');
+
+    % D1 时延差分层统计 (|dL - dR| 分组，非控制变量扫描，属于单调分层关联)
+    fprintf('\n--- [D1 时延差分层统计 (|dL - dR| 分组)] ---\n');
+    for skew_steps = 0:2
+        idx = (delay_skew_samples == skew_steps);
+        skew_ms = skew_steps * dt * 1e3;
+        fprintf('|dL-dR|=%d steps (%.1f ms): A=%.3f%%, D=%.3f%%, N=%d\n', ...
+            skew_steps, skew_ms, mean(d1_exceed_trials(idx, 1)), ...
             mean(d1_exceed_trials(idx, 4)), sum(idx));
     end
 
@@ -712,11 +725,12 @@ function verify_step3c_part3()
     rms_delta_y   = sqrt(mean(delta_y_all(:).^2));
     p95_abs_delta_y = prctile(abs(delta_y_all(:)), 95);
     rms_delta_phi = sqrt(mean(delta_phi_all(:).^2));
-    fprintf('    - RMS(delta_y)   : %.4e\n', rms_delta_y);
-    fprintf('    - P95(|delta_y|) : %.4e\n', p95_abs_delta_y);
-    fprintf('    - RMS(delta_phi) : %.4e\n', rms_delta_phi);
+    fprintf('    - RMS(delta_y)   : %.4e N*m\n', rms_delta_y);
+    fprintf('    - P95(|delta_y|) : %.4e N*m\n', p95_abs_delta_y);
+    fprintf('    - RMS(delta_phi) : %.4e count*m\n', rms_delta_phi);
+    fprintf('    [说明] 在对称真值 Delta_Kf*=0 下，y_f 等于零参数假设下的表观回归残差。\n');
 
-    % 导出逐试验明细表 step3c_part3_d1_trial_results.csv
+    % 导出逐试验明细表 step3c_part3_d1_trial_results.csv (包含明确单位转换与 Effective Delay 字段)
     trial_rows = cell(N_mc * numel(d1_branches), 10);
     row_idx = 0;
     for bi = 1:numel(d1_branches)
@@ -725,26 +739,43 @@ function verify_step3c_part3()
             row_idx = row_idx + 1;
             orig_dL = trials_base{j}.d_meas_L;
             orig_dR = trials_base{j}.d_meas_R;
-            skew_j  = abs(orig_dL - orig_dR);
 
             switch d1_branches{bi}
-                case 'A', app_dL = orig_dL; app_dR = orig_dR;
-                case 'B', app_dL = 1; app_dR = 1;
-                case 'C', app_dL = 2; app_dR = 2;
-                case 'D', app_dL = max(orig_dL, orig_dR); app_dR = max(orig_dL, orig_dR);
-                case 'E', app_dL = orig_dL; app_dR = orig_dR;
+                case 'A'
+                    app_dL = orig_dL;
+                    app_dR = orig_dR;
+                case 'B'
+                    app_dL = 1;
+                    app_dR = 1;
+                case 'C'
+                    app_dL = 2;
+                    app_dR = 2;
+                case 'D'
+                    d_common = max(orig_dL, orig_dR);
+                    app_dL = d_common;
+                    app_dR = d_common;
+                case 'E'
+                    d_aligned = max(orig_dL, orig_dR);
+                    app_dL = d_aligned;
+                    app_dR = d_aligned;
             end
+
+            orig_dL_ms = orig_dL * dt * 1e3;
+            orig_dR_ms = orig_dR * dt * 1e3;
+            eff_dL_ms  = app_dL  * dt * 1e3;
+            eff_dR_ms  = app_dR  * dt * 1e3;
+            skew_ms    = abs(orig_dL - orig_dR) * dt * 1e3;
 
             seed_j = 20260924 + j;
             trial_rows(row_idx, :) = { ...
                 j, seed_j, b_id, ...
-                orig_dL, orig_dR, app_dL, app_dR, ...
-                skew_j, d1_exceed_trials(j, bi), d1_final_trials(j, bi)};
+                orig_dL_ms, orig_dR_ms, eff_dL_ms, eff_dR_ms, ...
+                skew_ms, d1_exceed_trials(j, bi), d1_final_trials(j, bi)};
         end
     end
     trial_header = { ...
         'Trial_ID', 'Seed', 'Branch_ID', ...
-        'Original_dL_ms', 'Original_dR_ms', 'Applied_dL_ms', 'Applied_dR_ms', ...
+        'Original_dL_ms', 'Original_dR_ms', 'Effective_dL_ms', 'Effective_dR_ms', ...
         'Original_delay_skew_ms', 'theta_exceed_ratio', 'abs_theta_final'};
     T_trials = cell2table(trial_rows, 'VariableNames', trial_header);
     file_trials = fullfile(script_dir, 'step3c_part3_d1_trial_results.csv');
