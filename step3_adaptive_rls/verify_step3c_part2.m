@@ -1174,7 +1174,12 @@ function verify_step3c_part2()
         mask_ev = res_raw.mask_eval;
         c8c_gamma_dev(j) = max([abs(gate_L_del(mask_ev) - 1.0); abs(gate_R_del(mask_ev) - 1.0)]);
         idx_eval_end_j = find(res_raw.t <= res_raw.t_eval_end, 1, 'last');
-        c8c_gamma_final_dev(j) = max(abs(gate_L_del(idx_eval_end_j) - 1.0), abs(gate_R_del(idx_eval_end_j) - 1.0));
+        cal_final = step3b_offline_calibration( ...
+            theta_ts(idx_eval_end_j), d_sym.Kf_mean);
+
+        c8c_gamma_final_dev(j) = max( ...
+            abs(cal_final.gamma_L - 1.0), ...
+            abs(cal_final.gamma_R - 1.0));
         
         active_gate = (abs(gate_L_del - 1.0) > 1e-12) | (abs(gate_R_del - 1.0) > 1e-12);
         c8c_active_ratio(j) = 100.0 * mean(active_gate(res_raw.mask_eval));

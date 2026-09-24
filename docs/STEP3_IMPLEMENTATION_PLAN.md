@@ -464,7 +464,7 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
 1. **`step3c_performance_results.csv`**（19 行 x 68 列）：
    - 区分估计值有符号中位数（`Delta_Kf_Hat_Median`）与绝对误差中位数（`Delta_Kf_AbsError_Median`）；
    - 显式分离终点静态标定偏离度（`gamma_final_dev_max`）与实际生效时序峰值偏离度（`gamma_applied_timeseries_dev_max`）；
-   - 统一采用有限样本统计并记录有效样本数（`eta_total_valid_count`）：C4 为 1，C5 为 100，C8A 为 100，C8B 为 0，C8C 为 `NaN`；若有效样本数为 0，则 `eta_total_mean`、`eta_total_p05` 与 `eta_total_min` 统一置为 `NaN`；
+   - 统一采用有限样本统计并记录有效样本数（`eta_total_valid_count`）：C4 为 1，C5 为 100，C8A 为 91，C8B 为 0，C8C 为 NaN。C8A 的 eta_total 统计仅基于 91 个有限样本；另外 9 个试验因基线总扰动力矩分母接近零而不适用（C8A 有限样本统计：mean=-299.4175%，P05=-1852.5955%，min=-2991.3644%，有效样本数 n=91）；若有效样本数为 0，则 `eta_total_mean`、`eta_total_p05` 与 `eta_total_min` 统一置为 `NaN`；
    - 细化总抑制率分布：`eta_total_mean`, `eta_total_p05`, `eta_total_min`；
    - 区分物理偏航均值与尾部：`RMS_alpha_comp_dyn_mean`, `RMS_alpha_comp_dyn_p95`；
    - 彻底拆分重用列，独立设立专用字段：
@@ -488,7 +488,7 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
 3. 产出 `step3c_part1_results.csv` (58 行 x 40 列) 并通过纯文本日志无 NUL 验证。
 
 #### 第二阶段：Step 3C-2（动力学耦合与多因素深度分析，已执行但未通过最终验收）
-1. **Test C4**：基于统一动力学积分（固定 $\Delta m = 50.0\text{ kg}$）的偏载惯性力矩诊断评估，局部拟合 $R^2 = 0.8722 < 0.95$，严格定性为“方向一致性与非线性偏载特征”，不宣称局部线性解耦；
+1. **Test C4**：基于统一动力学积分（固定 $\Delta m = 50.0\text{ kg}$）的偏载惯性力矩诊断评估，r070：R²=0.9149，斜率为 8.9834×10^-3 (N/count)/m；r130：R²=0.8722，斜率为 7.8606×10^-3 (N/count)/m。两个数据集均未达到 R²≥0.95，最差值为 0.8722，因此仅支持方向一致性与非线性偏载特征，不宣称局部线性解耦；
 2. **Test C5**：多指标最劣角点并集（$\eta_{\text{total}}$ 最低、$\operatorname{RMS}(\alpha)$ 最大、$\theta$ 误差最大，取 Top 3 并集得 6 个角点）蒙特卡洛评估，如实报告 `DEGRADED`；
 3. **Test C6**：带物理量纲导数与 `Range_Impact` 排序；
 4. **Test C7**：阶跃冲击下凸集投影双侧物理边界激活（低端 25641 次，高端 20527 次截断），100% 安全通过；

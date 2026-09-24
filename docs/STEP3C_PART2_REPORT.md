@@ -18,7 +18,7 @@
    - 记录 Test C4 (14 行)、C5 (2 行)、C8A (1 行)、C8B (1 行)、C8C (1 行) 共 **19 行 $\times$ 68 列**；
    - 区分估计值有符号中位数（`Delta_Kf_Hat_Median`）与绝对误差中位数（`Delta_Kf_AbsError_Median`）；
    - 显式分离终点静态标定增益偏离度（`gamma_final_dev_max`）与评测窗口内实际生效时序峰值偏离度（`gamma_applied_timeseries_dev_max`）；
-   - 统一采用有限样本统计并记录有效样本数（`eta_total_valid_count`）：C4 为 1，C5 为 100，C8A 为 100，C8B 为 0，C8C 为 `NaN`；若有效样本数为 0，则 `eta_total_mean`、`eta_total_p05` 与 `eta_total_min` 统一置为 `NaN`；
+   - 统一采用有限样本统计并记录有效样本数（`eta_total_valid_count`）：C4 为 1，C5 为 100，C8A 为 91，C8B 为 0，C8C 为 NaN。C8A 的 eta_total 统计仅基于 91 个有限样本；另外 9 个试验因基线总扰动力矩分母接近零而不适用（C8A 有限样本统计：mean=-299.4175%，P05=-1852.5955%，min=-2991.3644%，有效样本数 n=91）；若有效样本数为 0，则 `eta_total_mean`、`eta_total_p05` 与 `eta_total_min` 统一置为 `NaN`；
    - 区分物理偏航角均值（`RMS_alpha_comp_dyn_mean`）与 P95 尾部统计（`RMS_alpha_comp_dyn_p95`）；
    - 彻底拆分重用列，设立 4 个独立专用字段：`theta_exceed_time_mean`、`theta_final_exceed_trial_ratio`、`projection_trial_ratio`、`gate_active_time_mean`；
    - C8C 显式声明应用模式为 `ONE_PASS_CAUSAL_GATED_REPLAY`（单次因果门控反事实回放，估计序列来自未补偿基线试验，状态不反馈重新递推），计算实际延迟后门控增益均值（$\gamma_L, \gamma_R$）与真实物理饱和时间比例 `comp_total_sat`，标定有效性标记为 `NOT_APPLICABLE`；
@@ -83,8 +83,10 @@ $$\theta_{\text{payload\_bias}}(d_{\text{load}}) = \hat{\theta}(d_{\text{load}})
 
 ### 3.3 局部分析与机理定性
 - **符号反转机理实证**：在 $d_{\text{load}} = \pm 0.05\text{ m}$ 下，r070 与 r130 的增量偏差均呈现严格的符号反转（$-4.010\times 10^{-4}$ vs $+6.522\times 10^{-4}$，$-6.517\times 10^{-4}$ vs $+2.141\times 10^{-4}$），证实了未建模惯性力矩 $T_{\text{load}} = -\Delta m \ddot{y}_G d_{\text{load}}$ 的方向驱动作用。
-- **局部拟合度检验**：在 $d_{\text{load}} \in [-0.10, +0.10]\text{ m}$ 范围内对 $\theta_{\text{payload\_bias}}$ 执行一阶线性拟合，计算得确定系数 $R^2 = 0.8722$（拟合斜率 $7.8606\times 10^{-3}\ (\text{N/count})/\text{m}$）。
-  因 $R^2 < 0.95$，结论严格定性为：**“偏载扰动表现为方向一致性与非线性偏载特征”**，坚决不宣称“局部线性解耦”。
+- **局部拟合度检验**：在 $d_{\text{load}} \in [-0.10, +0.10]\text{ m}$ 范围内对 $\theta_{\text{payload\_bias}}$ 执行一阶线性拟合：
+  r070：R²=0.9149，斜率为 8.9834×10^-3 (N/count)/m；
+  r130：R²=0.8722，斜率为 7.8606×10^-3 (N/count)/m。
+  两个数据集均未达到 R²≥0.95，最差值为 0.8722，因此仅支持方向一致性与非线性偏载特征，不宣称局部线性解耦。
 
 ---
 
