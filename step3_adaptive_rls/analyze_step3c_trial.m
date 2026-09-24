@@ -164,18 +164,25 @@ function res = analyze_step3c_trial(base_data, cfg)
     alpha_ss_base = rms_base / K_alpha;
     alpha_ss_comp = rms_comp / K_alpha;
 
-    % 8.4 执行时滞下的真实物理动力学响应 RK4 重积分与动态角偏差
-    has_act_delay = (dL_act > 0 || dR_act > 0);
+    % 8.4 执行时滞与偏载耦合下的真实物理动力学响应 RK4 重积分与动态角偏差
+    delta_m_val = 0.0;
+    d_load_val = 0.0;
+    delta_fric_val = 0.0;
+    if isfield(pert_data.cfg, 'delta_m'), delta_m_val = pert_data.cfg.delta_m; end
+    if isfield(pert_data.cfg, 'd_load'), d_load_val = pert_data.cfg.d_load; end
+    if isfield(pert_data.cfg, 'delta_fric'), delta_fric_val = pert_data.cfg.delta_fric; end
+
+    has_resim = (dL_act > 0 || dR_act > 0 || delta_m_val ~= 0 || d_load_val ~= 0 || delta_fric_val ~= 0);
     alpha_no_delay = base_data.alpha;
     alpha_base_dyn = pert_data.alpha_true;
-    if has_act_delay
+    if has_resim
         alpha_comp_dyn = zeros(N, 1);
         x_c = zeros(4, 1);
         for k = 1:N
             [x_c_next, ~] = gantry_dynamics_step_rk4(...
                 x_c, iL_comp_applied(k), iR_comp_applied(k), ...
                 base_data.mech, base_data.plant, ...
-                0.0, 0.0, 0.0, dt, Kf_L, Kf_R);
+                delta_m_val, d_load_val, delta_fric_val, dt, Kf_L, Kf_R);
             alpha_comp_dyn(k) = x_c(2);
             x_c = x_c_next;
         end
@@ -190,6 +197,11 @@ function res = analyze_step3c_trial(base_data, cfg)
         rms_dalpha_comp = 0.0;
         rms_alpha_base_dyn = sqrt(mean(alpha_base_dyn(mask_eval).^2));
         rms_alpha_comp_dyn = rms_alpha_base_dyn;
+    end
+    if rms_alpha_base_dyn > 1.0e-12
+        eta_alpha_dyn = (1.0 - rms_alpha_comp_dyn / rms_alpha_base_dyn) * 100.0;
+    else
+        eta_alpha_dyn = NaN;
     end
 
     % 8.5 传感器滤波衰减量量化 (针对位置噪声 C3)
@@ -239,10 +251,14 @@ function res = analyze_step3c_trial(base_data, cfg)
     sample_clip_ratio = unproj_clipped_count / N_eval;
     has_any_clip = (unproj_clipped_count > 0);
     unproj_max_peak = max(abs(unproj_eval));
+    exceed_false_ratio = 100.0 * mean(abs(proj_eval) > 1.0e-5);
 
     % 11. 打包单次试验输出
     res = struct();
     res.cfg                 = cfg;
+    res.delta_m             = delta_m_val;
+    res.d_load              = d_load_val;
+    res.delta_fric          = delta_fric_val;
     res.Delta_Kf_true       = base_data.Delta_Kf_true;
     res.theta_hat           = final_theta;
     res.theta_unproj_final  = unproj_final_theta;
@@ -271,6 +287,7 @@ function res = analyze_step3c_trial(base_data, cfg)
     res.rms_dalpha_comp     = rms_dalpha_comp;
     res.rms_alpha_base_dyn  = rms_alpha_base_dyn;
     res.rms_alpha_comp_dyn  = rms_alpha_comp_dyn;
+    res.eta_alpha_dyn       = eta_alpha_dyn;
 
     res.svf_atten_dB        = svf_atten_dB;
     res.pe_false_alarm_rate = pe_false_alarm_rate;
@@ -287,7 +304,12 @@ function res = analyze_step3c_trial(base_data, cfg)
     res.unproj_clipped_count= unproj_clipped_count;
     res.sample_clip_ratio   = sample_clip_ratio;
     res.has_any_clip        = has_any_clip;
-    res.pe_active_ratio     = pe_active_ratio;
+    res.exceed_false_ratio  = exceed_false_ratio;
+
+    % 评估窗口内时序序列 (用于 C7/C8 统计检验)
+    res.theta_proj_eval     = proj_eval;
+    res.theta_unproj_eval   = unproj_eval;
+    res.P_history_eval      = P_history(mask_eval);
 
     % 完整时序数据
     res.t                   = t;

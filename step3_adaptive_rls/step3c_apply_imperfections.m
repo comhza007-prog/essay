@@ -58,6 +58,16 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
     % 位置量化台阶分辨率 (m, 标称 1e-6 即 1um; 0 表示连续无量化)
     if ~isfield(cfg, 'quant_res'), cfg.quant_res = 1.0e-6; end
 
+    % 偏载物理参数 (kg, m) 与导轨摩擦非对称系数
+    if ~isfield(cfg, 'delta_m'),    cfg.delta_m    = 0.0; end
+    if ~isfield(cfg, 'd_load'),     cfg.d_load     = 0.0; end
+    if ~isfield(cfg, 'delta_fric'), cfg.delta_fric = 0.0; end
+
+    % 阶跃故障跳变 (针对 Test C7 凸集投影安全性强扰动)
+    if ~isfield(cfg, 'step_fault_t'),     cfg.step_fault_t     = Inf; end
+    if ~isfield(cfg, 'step_fault_amp_L'), cfg.step_fault_amp_L = 0.0; end
+    if ~isfield(cfg, 'step_fault_amp_R'), cfg.step_fault_amp_R = 0.0; end
+
     % 随机数发生器种子 (确保 Monte Carlo 严格确定性复现)
     if isfield(cfg, 'seed') && ~isempty(cfg.seed)
         rng(cfg.seed);
@@ -115,10 +125,10 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
     iL_applied = max(-Imax, min(Imax, iL_delayed_cmd));
     iR_applied = max(-Imax, min(Imax, iR_delayed_cmd));
 
-    %% 3. 执行时滞下的动力学响应生成 (因果重积分 vs 复用基准轨迹)
-    has_act_delay = (dL_act > 0 || dR_act > 0);
+    %% 3. 执行时滞与偏载耦合下的动力学响应生成 (因果重积分 vs 复用基准轨迹)
+    has_resim = (dL_act > 0 || dR_act > 0 || cfg.delta_m ~= 0 || cfg.d_load ~= 0 || cfg.delta_fric ~= 0);
 
-    if has_act_delay
+    if has_resim
         % 严格要求: 显式逐步调用公共单步函数 common/gantry_dynamics_step_rk4.m 重新积分
         yG_hist         = zeros(N, 1);
         alpha_hist      = zeros(N, 1);
@@ -131,7 +141,7 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
         for k = 1:N
             [x_next, details] = gantry_dynamics_step_rk4(...
                 x, iL_applied(k), iR_applied(k), mech, plant, ...
-                0.0, 0.0, 0.0, dt, Kf_L, Kf_R);
+                cfg.delta_m, cfg.d_load, cfg.delta_fric, dt, Kf_L, Kf_R);
 
             yG_hist(k)         = x(1);
             alpha_hist(k)      = x(2);
@@ -204,6 +214,13 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
     iL_meas = (1.0 + cfg.delta_g_L) * iL_meas_delayed + cfg.i_bias_L + v_iL;
     iR_meas = (1.0 + cfg.delta_g_R) * iR_meas_delayed + cfg.i_bias_R + v_iR;
 
+    % 阶跃故障跳变 (针对 Test C7 凸集投影安全性强扰动)
+    if isfinite(cfg.step_fault_t)
+        fault_mask = (t >= cfg.step_fault_t);
+        iL_meas(fault_mask) = iL_meas(fault_mask) + cfg.step_fault_amp_L;
+        iR_meas(fault_mask) = iR_meas(fault_mask) + cfg.step_fault_amp_R;
+    end
+
     %% 5. 传感器位置测量层生成 (量化台阶 + 高斯随机噪声)
     % 5.1 量化处理
     if cfg.quant_res > 0
@@ -261,6 +278,9 @@ function [pert_data] = step3c_apply_imperfections(base_data, cfg)
     pert_data.alpha_true      = alpha_true;
     pert_data.alpha_ddot_hist = alpha_ddot_hist;
     pert_data.T_fric_hist     = T_fric_hist;
+    pert_data.delta_m         = cfg.delta_m;
+    pert_data.d_load          = cfg.d_load;
+    pert_data.delta_fric      = cfg.delta_fric;
 
     pert_data.yL_q            = yL_q;
     pert_data.yR_q            = yR_q;
