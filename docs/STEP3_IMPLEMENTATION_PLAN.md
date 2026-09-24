@@ -495,3 +495,17 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
 5. **Test C8**：C8A 原始估计器超标时间均比为 92.75%（门槛 5.0%），程序化输出 `RAW_ESTIMATOR_FAIL`；C8B 完成偏载匹配差分与 P95 统计；C8C 完成真实 RK4 动力学重积分，定性为 `GATED_APPLICATION_EVAL_ONLY`；导出确定性差模表。
 - **阶段状态结论**：**只有 C8A 原始估计器通过 5% 超标时间门槛且 C8C 物理动态指标完善后才可讨论关闭。当前 Step 3 严格保持 OPEN。**
 
+#### 第三阶段：Step 3C-3（D0 Oracle 电流校正与 D0b 匹配消融分析，执行中/阶段归档）
+1. **理论公式修正与可辨识性界定**：
+   - 纠正表观推力差模理论公式：$\Delta K_{f,\mathrm{apparent}} \approx \pm K_{f,\mathrm{nom}} (\delta_g^L - \delta_g^R) = 0.0061979 \times 0.04 = 2.4792\times 10^{-4}\text{ N/count}$，与 C8A 实测差模偏差理论严格闭合；
+   - 明确单通道可测信息仅能识别复合等效推力 $K_{f,L,\mathrm{eff}} = K_{f,L} / (1+\delta_g^L)$，在无独立基准观测时不可通过状态扩展解耦，技术路线定性为“独立电流通道标定 + 校正后推力差模辨识”；
+   - 收紧 C8C 因果定性：当前门控在 88.69% 的评测时间内保持激活，偏航角 RMS 增加 0.69%，不能将退化唯一归因于门控切换或闭环交互。
+2. **Test D0 (Oracle 电流通道校正)**：
+   - 严格在对称模型、相同 100 种子与相同五项门槛下运行；
+   - 4/5 正式验收指标大幅通过：$P_{95}(|\hat{\theta}|) = 5.99\times 10^{-6}\text{ N/ct} \le 1.0\times 10^{-5}$，$\operatorname{median}(|\hat{\theta}|) = 1.86\times 10^{-6}\text{ N/ct} \le 5.0\times 10^{-6}$，$\max|\gamma-1| = 0.0708\% \le 0.50\%$，$\max\text{RMS}(T_{\alpha,\text{comp}}) = 0.00401\text{ Nm} \le 0.010\text{ Nm}$；4 种确定性最差差模工况全部 PASS；
+   - 超标时间比例均值从 92.75% 降至 6.82%，但仍超 5.00% 刚性门槛，程序化状态定性为 **`ORACLE_FAIL_TIME_RATIO`**；
+   - 证实电流通道标定解决了主要系统误差；暂停正式标定模块开发，先定位剩余 1.82 percentage-point 运动起始瞬态误差；原因尚未完成消融，不提前归因于具体噪声源。
+3. **Test D0b (六分支匹配消融分析)**：
+   - 在相同 100 种子下对位置白噪声（B）、位置量化（C）、电流白噪声（D）、测量时滞（E）、噪声量化全关（F）开展匹配消融，精准定位各非理想扰动源对起始瞬态超标的边际贡献。
+- **阶段状态结论**：**Step 3 依然严格保持 OPEN。**
+
