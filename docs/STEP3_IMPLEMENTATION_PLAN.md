@@ -1,4 +1,4 @@
-# Step 3 实施方案：状态变量滤波 (SVF) 与机械参数在线辨识 (Phase 1 优先实施版)
+﻿# Step 3 实施方案：状态变量滤波 (SVF) 与机械参数在线辨识 (Phase 1 优先实施版)
 
 ## 一、方案定位与参数溯源说明 (Scope & Provenance)
 
@@ -535,5 +535,60 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
      * 机理与残差说明：在对称真值 $\Delta K_f^* = 0$ 下，由于被估计真值为零，$y_f$ 等于零参数假设下的表观回归残差；在运动起始的高电流变化率区间，左右回采通道的异步时延会改变共模、差模电流回归信号的时间对应关系，从而产生额外回归残差。该机理由 D1-A/D 的配对消融与程序化统计支持。
    - **归档结论与定性声明**：
      * **D1通过。严格配对结果支持差模测量时延是当前仿真范围内估计瞬态超标的主导贡献因素，Oracle已知时延因果对齐能够使相关指标进入门槛。该结论不代表在线时延识别或物理台架验证已经完成。**
-- **阶段状态结论**：**Step 3 依然严格保持 OPEN。** （红线：未修改闭环控制器与分流分配器，不提前宣称 Step 3 完成，待后续推进独立电流标定与正式因果时延对齐）。
+- **阶段状态结论**：**D1 正式通过验收并关闭归档；Step 3 整体依然严格保持 OPEN。**
 
+#### 第四阶段：Step 3C-4（独立电流通道标定、非 Oracle 因果时延处理与 C8-eng 复测规划）
+
+1. **核心工程原则与信号处理管线**：
+   - 信号处理管线严格遵循因果单向顺序，**严禁对已滤波信号进行平移或时空倒置**：
+     $$\text{原始传感器回采} \xrightarrow{\text{零偏剔除}} \xrightarrow{\text{增益校正}} \xrightarrow{\text{时延估计}} \xrightarrow{\text{因果缓冲对齐}} \xrightarrow{\text{SVF 状态滤波}} \xrightarrow{\text{回归向量构造}} \xrightarrow{\text{RLS 估计}}$$
+   - 将工程前端独立解耦为两个核心算法模块，不触碰底层闭环控制器与分配器：
+     * `step3c_current_channel_calibrator.m`：电流量测静态零偏与增益校正；
+     * `step3c_causal_delay_aligner.m`：通信时延估计与因果历史对齐缓冲。
+
+2. **模块接口契约规范**：
+   - **电流通道校准模块接口**：
+     ```matlab
+     [current_cal, calib_info] = step3c_current_channel_calibrator(current_raw, cmd, state, opts);
+     ```
+     * 输入：`current_raw` (原始回采量 $i_{\text{meas},L/R}$)，`cmd` (控制器指令 $i_{\text{cmd},L/R}$)，`state` (运动状态 $v_G, \omega, a_G$ 及驱动使能标志 `drive_torque_disabled`)，`opts` (校准配置参数)；
+     * 输出：`current_cal` (校准后电流 $i_{\text{cal},L/R}$)，`calib_info` (标定状态机：`is_calibrated`, `bias_hat`, `gain_scale`)。
+   - **因果时延对齐模块接口**：
+     ```matlab
+     [signals_aligned, delay_info] = step3c_causal_delay_aligner(current_cal, position, timestamp, opts);
+     ```
+     * 输入：`current_cal` (已校准电流)，`position` (光栅尺位置量测)，`timestamp` (总线接收/源时间戳结构体)，`opts` (对齐配置与历史缓冲区深度)；
+     * 输出：`signals_aligned` (同基准因果对齐后的电流与位置数组)，`delay_info` (识别的时延步数 $\hat{d}_L, \hat{d}_R, \Delta \hat{d}$ 及互相关置信度指标)。
+
+3. **Step 3C-4 三个独立验收门 (Staged Acceptance Gates)**：
+
+   - **验收门 1: Test C4-A（霍尔传感器静态零偏标定单元测试）**：
+     * **定位**：独立的电流量测零偏校准单元测试，**不运行 RLS，不接闭环控制**；
+     * **刚性采样准入判据**：仅在驱动输出关闭、PWM 禁用或零转矩校准状态下采样：
+       $$|i_{\text{cmd},L}| \le \text{th}_{\text{cmd}}, \quad |i_{\text{cmd},R}| \le \text{th}_{\text{cmd}}, \quad |v_G| \le \text{th}_v, \quad |\omega| \le \text{th}_\omega, \quad |a_G| \le \text{th}_a, \quad \text{drive\_torque\_disabled} == \text{true}$$
+     * **算法要求**：采用 Hampel / MAD 稳健统计与中位数估计 $\hat{i}_{\text{bias}} = \operatorname{median}(i_{\text{meas}})$，严禁使用普通代数均值；
+     * **验收指标**：零偏真值范围 $[-30, +30]\text{ counts}$，高斯噪声 $\sigma_i = 10\text{ counts}$，100 次蒙特卡洛评估，必须满足 $P_{95}(|\hat{i}_{\text{bias}} - i_{\text{bias,true}}|) \le 2.0\text{ counts}$；非静止或使能激活状态严禁更新；标定结束后参数锁定冻结，不得受运动动态电流污染。
+
+   - **验收门 2: Test C4-B（时延识别与因果对齐单元测试）**：
+     * **定位**：固定已知增益与零偏，独立评估通信时延估计器与因果对齐缓冲区；
+     * **时延确定优先级**：
+       1. 首选方案：报文源时间戳 + 接收时间戳 + 总线序列号硬对齐；
+       2. 备选方案（无硬件时间戳）：各通道独立相对自身命令参考估计绝对时延 $d_L = \arg\max R(i_{\text{cmd},L}, i_{\text{meas},L})$ 与 $d_R = \arg\max R(i_{\text{cmd},R}, i_{\text{meas},R})$，严禁仅使用左右互相关确定时延；明确区分执行器滞后 $d_{\text{act}}$ 与通信量测滞后 $d_{\text{meas}}$；
+       3. 互相关更新准入：仅在高电流变化率、无饱和、窗口方差超标且第一峰与第二峰峰值差超越显著性门限时更新；平稳段保持先前可信估计；
+     * **验收指标**：测试 $0, 1, 2\text{ samples}$ 时滞工况，高激励区间时延识别正确率 $\ge 95\%$；因果缓冲区对齐后残余差模时延为 0。
+
+   - **验收门 3: Test C4-C（增益校正与可辨识性界定）**：
+     * **定位与可辨识性红线**：承认纯回采量测（电流+位置）数学上不可解耦传感器增益误差 $\delta_g$ 与推力系数不对称 $\Delta K_f$。“对称运行段相对增益校准”只能作为假设性通道均衡，不可宣称为绝对增益标定；
+     * **工程优先级**：驱动出厂标定参数/源时间戳 > 精密分流电阻/基准校准源 > 外置电流表离线实测 > 对称运行相对均衡（显式标记为假设性支线）；
+     * **设计门槛**：允许差模残差 $|\delta_g^L - \delta_g^R| \le 0.10\%$（满足表观推力偏差 $\le 1\times 10^{-5}\text{ N/ct}$ 且保留裕量）；
+     * **保护性测试**：对称系统校准后虚假 $\Delta K_f \le 1\times 10^{-5}\text{ N/ct}$；$r=0.70$ 与 $r=1.30$ 真实不对称符号保持且相对辨识误差 $\le 5\%$，绝不允许将物理真实不对称抹除。
+
+4. **工程前端集成与 C8 复测规范 (C8A-eng & C8C-eng)**：
+   - **双轨命名规范**：
+     * `C8A-raw`：保留 $92.75\%$ 原始未校正估计器基线结果作为历史对照，严禁覆盖；
+     * `C8A-eng`：串联零偏标定、增益校正与因果对齐工程前端后的估计器；
+     * `C8C-eng`：接入工程前端后的门控物理动态反事实回放与重积分。
+   - **验收判据固定（严禁拔高门槛或缩短评测窗口）**：
+     * `C8A-eng`：对称全要素工况下超标时间均值严格 $\le 5.00\%$，原五项正式判据全数通过；且在 $r=0.70/1.30$ 非对称工况下保留真实物理参数跟踪能力；
+     * `C8C-eng`：严格配对蒙特卡洛评估，平均偏航改善度 $> 0$，中位数 $> 0$，95% CI 下界 $> 0$（或报告统计显著性），不通过调节原门控阈值凑取通过；
+   - **最终关闭准则**：只有 `C8A-eng` 与 `C8C-eng` 在非 Oracle 工程前端下完整达标，方可正式讨论关闭 Step 3。当前 Step 3 依然严格保持 **`OPEN`**。
