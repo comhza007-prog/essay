@@ -93,7 +93,8 @@ function test_step3c_c4c_gain_calibration()
     opts_c1b.Kf_nominal = Kf0;
     opts_c1b.Imax = Imax;
     opts_c1b.N_min = 200;
-    opts_c1b.reference_kind = 'HARDWARE_EXTERNAL_REFERENCE';
+    opts_c1b.reference_kind = 'SIMULATED_EXTERNAL_REFERENCE';
+    opts_c1b.calibration_profile = 'C4C_SIM_EXTERNAL_REFERENCE';
 
     rng(101, 'twister');
     calib_state_c1b = [];
@@ -107,8 +108,8 @@ function test_step3c_c4c_gain_calibration()
 
     assert(strcmp(info_c1b.identifiability_status, 'CALIBRATED_EXTERNAL_REFERENCE'), ...
         'C1-B: 状态应为 CALIBRATED_EXTERNAL_REFERENCE');
-    assert(strcmp(info_c1b.gain_source, 'EXTERNAL_HARDWARE_SOURCE'), ...
-        'C1-B: gain_source 应为 EXTERNAL_HARDWARE_SOURCE');
+    assert(strcmp(info_c1b.gain_source, 'EXTERNAL_REFERENCE_SIM'), ...
+        'C1-B: gain_source 应为 EXTERNAL_REFERENCE_SIM');
     assert(abs(info_c1b.apparent_delta_kf) <= th_false_dkf, ...
         sprintf('C1-B: 外置基准标定虚假 Delta_Kf=%.2e 超标 (门限 %.2e)', info_c1b.apparent_delta_kf, th_false_dkf));
     assert(calib_state_c1b.is_frozen, 'C1-B: 标定完成后必须进入冻结状态');
@@ -119,6 +120,7 @@ function test_step3c_c4c_gain_calibration()
     records(end+1) = make_c4c_record('C1_SYMMETRIC_EXTERNAL', 2, opts_c1b.mode, info_c1b, ...
         [1.0; 1.0], calib_state_c1b.gain_hat, true, extra_c1b);
 
+    fprintf('    [OK] C1-B: 仿真外部参考标定通过...\n');
     fprintf('    [OK] Subtest C1 验收通过: 对称系统虚假 Delta_Kf=%.2e N/ct <= 1.0e-5 N/ct!\n\n', ...
         abs(info_c1b.apparent_delta_kf));
 
@@ -189,6 +191,8 @@ function test_step3c_c4c_gain_calibration()
         % 2. EXTERNAL_REFERENCE 模式
         opts_c2_ext = struct();
         opts_c2_ext.mode       = 'EXTERNAL_REFERENCE';
+        opts_c2_ext.reference_kind = 'SIMULATED_EXTERNAL_REFERENCE';
+        opts_c2_ext.calibration_profile = 'C4C_SIM_EXTERNAL_REFERENCE';
         opts_c2_ext.N_min      = 200;
         opts_c2_ext.Kf_nominal = Kf0;
 
@@ -261,8 +265,14 @@ function test_step3c_c4c_gain_calibration()
     sigma_i_c3 = 5.0; % 电流测量高斯白噪声标准差 (counts)
 
     % 1. 分区 1: 0.05% 差模 (gL = 1.0005, gR = 1.0000) -> 必须满足 P95 虚假 Delta_Kf <= 1e-5 门限
-    opts_c3_005 = struct('mode', 'EXTERNAL_REFERENCE', 'Kf_nominal', Kf0, 'Imax', Imax, ...
-        'N_min', 200, 'max_asymmetry_range', 0.0020);
+    opts_c3_005 = struct( ...
+        'mode', 'EXTERNAL_REFERENCE', ...
+        'reference_kind', 'SIMULATED_EXTERNAL_REFERENCE', ...
+        'calibration_profile', 'C4C_SIM_EXTERNAL_REFERENCE', ...
+        'Kf_nominal', Kf0, ...
+        'Imax', Imax, ...
+        'N_min', 200, ...
+        'max_asymmetry_range', 0.0020);
     g_true_005 = [1.0005; 1.0000];
 
     gain_error_mc_005 = zeros(N_mc_c3, 1);
@@ -439,7 +449,12 @@ function test_step3c_c4c_gain_calibration()
     fprintf('-------------------------------------------------------------------------\n');
     fprintf('>>> [Subtest C4] 开始异常保护、低激励拦截、故障锁存与显式 reset 测试...\n');
 
-    opts_c4 = struct('mode', 'EXTERNAL_REFERENCE', 'Imax', Imax, 'Kf_nominal', Kf0);
+    opts_c4 = struct( ...
+        'mode', 'EXTERNAL_REFERENCE', ...
+        'reference_kind', 'SIMULATED_EXTERNAL_REFERENCE', ...
+        'calibration_profile', 'C4C_SIM_EXTERNAL_REFERENCE', ...
+        'Imax', Imax, ...
+        'Kf_nominal', Kf0);
 
     % Case 1: 电流饱和工况 (|i| >= 0.95*Imax) -> 独立初始化，必须锁存
     calib_state_sat = [];

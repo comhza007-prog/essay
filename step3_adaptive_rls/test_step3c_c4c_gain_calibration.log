@@ -6,6 +6,7 @@
 
 -------------------------------------------------------------------------
 >>> [Subtest C1] 开始对称系统标定源绑定测试 (真值 r=1.00, Delta_Kf=0)...
+    [OK] C1-B: 仿真外部参考标定通过...
     [OK] Subtest C1 验收通过: 对称系统虚假 Delta_Kf=3.87e-06 N/ct <= 1.0e-5 N/ct!
 
 -------------------------------------------------------------------------
@@ -27,14 +28,23 @@
     [OK] Subtest C3 验收通过: 严格三阶分区判定生效 (0.05%合格, 0.10%临界明确报告, 0.50%刚性拦截)!
 
 -------------------------------------------------------------------------
+>>> [Subtest C3-Ext] 开始仿真扩展范围标定验证 (C8A_EXTENDED_SIM_RANGE)...
+    验证参数: max_asymmetry_range = 0.05, 覆盖工业传感器容差
+      - [diff=0.005] 标定估计值=[1.0051; 0.9999], gain_source=EXTERNAL_REFERENCE_SIM, profile=C8A_EXTENDED_SIM_RANGE -> PASS
+      - [diff=0.010] 标定估计值=[1.0099; 1.0000], gain_source=EXTERNAL_REFERENCE_SIM, profile=C8A_EXTENDED_SIM_RANGE -> PASS
+      - [diff=0.020] 标定估计值=[1.0200; 1.0000], gain_source=EXTERNAL_REFERENCE_SIM, profile=C8A_EXTENDED_SIM_RANGE -> PASS
+      - [diff=0.040] 标定估计值=[1.0401; 1.0000], gain_source=EXTERNAL_REFERENCE_SIM, profile=C8A_EXTENDED_SIM_RANGE -> PASS
+    C8A_EXTENDED_SIM_RANGE: PASS
+
+-------------------------------------------------------------------------
 >>> [Subtest C4] 开始异常保护、低激励拦截、故障锁存与显式 reset 测试...
     [OK] Subtest C4 验收通过: 饱和、低激励、NaN、未确认时延、故障锁存防御与显式 reset 机制全数达标!
 
 -------------------------------------------------------------------------
 >>> 正在导出 Gate C4-C 完整结果表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_c4c_gain_results.csv
-    [OK] CSV 写入完成，共计 17 行 x 22 列
->>> 执行 CSV 全部 22 列 100% 逐元素严格内存回读校验...
-    [OK] CSV 全部 22 列 100% 逐元素严格回读断言全数通过!
+    [OK] CSV 写入完成，共计 21 行 x 24 列
+>>> 执行 CSV 全部 24 列 100% 逐元素严格内存回读校验...
+    [OK] CSV 全部 24 列 100% 逐元素严格回读断言全数通过!
 
 =========================================================================
    Gate C4-C (C4-C-SIM) 纯仿真单元测试结论: 全部 PASS
@@ -44,5 +54,5 @@
                                   RELATIVE_BALANCE_ASSUMED 严格限定为不可辨识假设支线 [PASS]
    Subtest C3 (增益差模三阶分区判定): MC100 带噪: 0.05%达标, 0.10%临界明确报告, 0.50%刚性拦截 [PASS]
    Subtest C4 (异常保护、锁存与reset): 饱和/NaN/时延未确认故障锁存, 正常输入偷跑拦截, 显式reset成功 [PASS]
-   数据治理与完整回读:              CSV 17 行 x 22 列 100% 逐元素回读一致 [PASS]
+   数据治理与完整回读:              CSV 21 行 x 24 列 100% 逐元素回读一致 [PASS]
 =========================================================================
