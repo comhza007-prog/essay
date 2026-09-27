@@ -56,6 +56,18 @@ function [signals_aligned, align_state_next, delay_info] = ...
     position    = position(:);
     opts.d_path_known = opts.d_path_known(:);
 
+    assert(numel(opts.d_path_known) == 2, 'd_path_known 元素个数必须为 2');
+    assert(numel(opts.d_pos_known) == 1 || numel(opts.d_pos_known) == 2, 'd_pos_known 元素个数必须为 1 或 2');
+
+    assert(all(isfinite(opts.d_path_known)), 'd_path_known 必须为有限数');
+    assert(all(opts.d_path_known >= 0), 'd_path_known 不能为负');
+    assert(all(mod(opts.d_path_known, 1) == 0), 'd_path_known 必须为整数采样延迟');
+
+    if all(isfinite(opts.d_pos_known))
+        assert(all(opts.d_pos_known >= 0), 'd_pos_known 不能为负');
+        assert(all(mod(opts.d_pos_known, 1) == 0), 'd_pos_known 必须为整数采样延迟');
+    end
+
     %% 2. 状态机跨步初始化与显式重置
     if nargin < 6 || isempty(align_state) || opts.reset
         align_state = struct();
@@ -286,9 +298,10 @@ function [signals_aligned, align_state_next, delay_info] = ...
             % 公共对齐参考时刻定义 (所有通道历史最新交集点)
             t_common = min([timestamp.t_source_L, timestamp.t_source_R, t_src_pos_L, t_src_pos_R]);
 
-            % 检查缓冲区预热深度是否足以因果覆盖回溯
+            % 检查缓冲区有效深度是否足以因果覆盖回溯 (且不超过物理缓冲区最大容量)
             req_depth = max([dL_meas_steps, dR_meas_steps, dposL_steps, dposR_steps, 0]) + 1;
-            if align_state_next.buffer_count < req_depth
+            valid_depth = min(align_state_next.buffer_count, align_state_next.buffer_depth);
+            if valid_depth < req_depth
                 delay_info.reject_reason             = 'BUFFER_WARMING';
                 delay_info.did_update                = false;
                 signals_aligned.valid_for_regression = false;
@@ -303,7 +316,8 @@ function [signals_aligned, align_state_next, delay_info] = ...
             idx_posL = find_causal_sample_index(align_state_next.t_source_buffer_pos_L, t_common);
             idx_posR = find_causal_sample_index(align_state_next.t_source_buffer_pos_R, t_common);
 
-            if isempty(idx_L) || isempty(idx_R) || isempty(idx_posL) || isempty(idx_posR)
+            if isempty(idx_L) || isempty(idx_R) || isempty(idx_posL) || isempty(idx_posR) || ...
+               idx_L > valid_depth || idx_R > valid_depth || idx_posL > valid_depth || idx_posR > valid_depth
                 delay_info.reject_reason             = 'BUFFER_WARMING';
                 delay_info.did_update                = false;
                 signals_aligned.valid_for_regression = false;
@@ -315,16 +329,21 @@ function [signals_aligned, align_state_next, delay_info] = ...
             assert(idx_L >= 1 && idx_R >= 1 && idx_posL >= 1 && idx_posR >= 1, '因果索引越界异常');
 
             % 满足深度后，更新时延状态与输出有效对齐信号
+            old_delay = align_state_next.last_trusted_delay;
+            new_delay = [dL_meas_steps; dR_meas_steps];
+
+            delay_info.did_update = any(~isfinite(old_delay)) || ...
+                                    any(old_delay ~= new_delay);
+
             align_state_next.d_hat_L            = dL_meas_steps;
             align_state_next.d_hat_R            = dR_meas_steps;
-            align_state_next.last_trusted_delay = [dL_meas_steps; dR_meas_steps];
+            align_state_next.last_trusted_delay = new_delay;
             align_state_next.is_initialized     = true;
 
-            delay_info.d_meas_hat        = [dL_meas_steps; dR_meas_steps];
+            delay_info.d_meas_hat        = new_delay;
             delay_info.d_total_hat       = delay_info.d_meas_hat;
             delay_info.delta_d_hat       = dL_meas_steps - dR_meas_steps;
             delay_info.confidence        = 1.0;
-            delay_info.did_update        = true;
 
             iL_align = align_state_next.current_buffer_L(idx_L);
             iR_align = align_state_next.current_buffer_R(idx_R);
@@ -400,14 +419,20 @@ function [signals_aligned, align_state_next, delay_info] = ...
                                 end
                             end
 
+                            old_trusted_total = align_state_next.last_trusted_total;
+
                             if all(align_state_next.confirm_count >= opts.N_confirm)
-                                align_state_next.last_trusted_delay = d_meas_cand;
+                                first_lock    = any(~isfinite(old_trusted_total));
+                                delay_changed = first_lock || any(d_total_cand ~= old_trusted_total);
+
                                 align_state_next.last_trusted_total = d_total_cand;
+                                align_state_next.last_trusted_delay = d_meas_cand;
                                 align_state_next.d_total_hat        = d_total_cand;
                                 align_state_next.d_hat_L            = d_meas_cand(1);
                                 align_state_next.d_hat_R            = d_meas_cand(2);
-                                delay_info.did_update               = true;
                                 align_state_next.is_initialized     = true;
+
+                                delay_info.did_update = delay_changed;
                             end
                         end
                     end
@@ -444,7 +469,8 @@ function [signals_aligned, align_state_next, delay_info] = ...
 
                 d_common = max([d_tot_L, d_tot_R, d_pos_L, d_pos_R]);
                 req_depth = d_common + 1;
-                if align_state_next.buffer_count >= req_depth
+                valid_depth = min(align_state_next.buffer_count, align_state_next.buffer_depth);
+                if valid_depth >= req_depth
                     idx_iL   = 1 + d_common - d_tot_L;
                     idx_iR   = 1 + d_common - d_tot_R;
                     idx_posL = 1 + d_common - d_pos_L;
@@ -463,12 +489,21 @@ function [signals_aligned, align_state_next, delay_info] = ...
                     signals_aligned.current_pair_valid        = true;
                     signals_aligned.absolute_alignment_valid  = true;
                     signals_aligned.valid_for_regression      = true;
-                    signals_aligned.common_timestamp          = (align_state_next.buffer_count - 1 - d_common) * opts.dt;
+                    t_iL = align_state_next.t_source_buffer_L(idx_iL);
+                    t_iR = align_state_next.t_source_buffer_R(idx_iR);
+                    t_pL = align_state_next.t_source_buffer_pos_L(idx_posL);
+                    t_pR = align_state_next.t_source_buffer_pos_R(idx_posR);
+
+                    if all(isfinite([t_iL, t_iR, t_pL, t_pR]))
+                        signals_aligned.common_timestamp      = min([t_iL, t_iR, t_pL, t_pR]);
+                        signals_aligned.used_source_timestamp = [t_iL; t_iR; t_pL; t_pR];
+                    else
+                        signals_aligned.common_timestamp      = NaN;
+                        signals_aligned.used_source_timestamp = [t_iL; t_iR; t_pL; t_pR];
+                    end
                     signals_aligned.current_cal               = [iL_align; iR_align];
                     signals_aligned.position                  = [yL_align; yR_align];
                     signals_aligned.used_index                = [idx_iL; idx_iR; idx_posL; idx_posR];
-                    signals_aligned.used_source_timestamp     = [signals_aligned.common_timestamp; signals_aligned.common_timestamp; ...
-                                                                 signals_aligned.common_timestamp; signals_aligned.common_timestamp];
                 else
                     delay_info.reject_reason             = 'BUFFER_WARMING';
                     signals_aligned.valid_for_regression = false;
@@ -540,11 +575,16 @@ function [signals_aligned, align_state_next, delay_info] = ...
                             end
                         end
 
+                        old_trusted_total = align_state_next.last_trusted_total;
+
                         if all(align_state_next.confirm_count >= opts.N_confirm)
+                            first_lock    = any(~isfinite(old_trusted_total));
+                            delay_changed = first_lock || any(d_total_cand ~= old_trusted_total);
+
                             align_state_next.last_trusted_total = d_total_cand;
                             align_state_next.d_hat_L            = d_tot_L;
                             align_state_next.d_hat_R            = d_tot_R;
-                            delay_info.did_update               = true;
+                            delay_info.did_update               = delay_changed;
                             align_state_next.is_initialized     = true;
                         end
                     end

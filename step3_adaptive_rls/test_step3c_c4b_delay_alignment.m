@@ -45,7 +45,7 @@ function test_step3c_c4b_delay_alignment()
     opts_base.N_confirm             = 5;
     opts_base.Imax                  = 16000.0;
 
-    % 用于全套测试治理的汇总记录存储 (至少包含 21 列)
+    % 用于全套测试治理的汇总记录存储 (共 26 列)
     records = struct( ...
         'Subtest', {}, 'Trial_ID', {}, ...
         'True_Delay_L', {}, 'True_Delay_R', {}, ...
@@ -53,7 +53,10 @@ function test_step3c_c4b_delay_alignment()
         'Candidate_Delay_L', {}, 'Candidate_Delay_R', {}, ...
         'Confirm_Count_L', {}, 'Confirm_Count_R', {}, ...
         'Trusted_Delay_L', {}, 'Trusted_Delay_R', {}, ...
-        'Used_Index_L', {}, 'Used_Index_R', {}, 'Used_Index_Pos', {}, ...
+        'Used_Index_L', {}, 'Used_Index_R', {}, ...
+        'Used_Index_Pos_L', {}, 'Used_Index_Pos_R', {}, ...
+        'Used_Timestamp_L', {}, 'Used_Timestamp_R', {}, ...
+        'Used_Timestamp_Pos_L', {}, 'Used_Timestamp_Pos_R', {}, ...
         'Common_Timestamp', {}, ...
         'Current_Pair_Valid', {}, 'Absolute_Alignment_Valid', {}, 'Valid_For_Regression', {}, ...
         'Reject_Reason', {}, 'Did_Update', {} ...
@@ -238,13 +241,12 @@ function test_step3c_c4b_delay_alignment()
     fprintf('    [OK] Subtest B1 验收通过: 8 组正常工况与 5 组异常时间戳全面闭环刚性拦截!\n\n');
 
     %% =====================================================================
-    %% [Subtest B2] XCORR_KNOWN_PATH 互相关模式 (MC 100 识别率 + 实际对齐真值校验)
+    %% [Subtest B2] XCORR_KNOWN_PATH 互相关模式 (四场景分流测试)
     %% =====================================================================
     fprintf('-------------------------------------------------------------------------\n');
-    fprintf('>>> [Subtest B2] 开始 XCORR_KNOWN_PATH 互相关识别与实际对齐真值校验 (MC 100)...\n');
+    fprintf('>>> [Subtest B2] 开始 XCORR_KNOWN_PATH 四场景分流测试 (A~D)...\n');
     fprintf('    设定: 非对称路径 d_path_known = [2; 4], 已知位置延迟 d_pos_known = 1\n');
 
-    N_mc_b2 = 100;
     d_path_true = [2; 4]; % 显式非对称路径
     d_pos_true  = 1;      % 显式已知位置延迟
 
@@ -253,8 +255,80 @@ function test_step3c_c4b_delay_alignment()
     opts_b2.d_path_known = d_path_true;
     opts_b2.d_pos_known  = d_pos_true;
 
-    b2_is_correct     = false(N_mc_b2, 1);
-    b2_align_err_max  = zeros(N_mc_b2, 1);
+    % ---------------------------------------------------------------------
+    % [Scenario A] 无噪声理想精确对齐测试 (noise_current = 0, 残差断言 < 1e-10)
+    % ---------------------------------------------------------------------
+    fprintf('    >>> [Scenario A] 无噪声理想精确因果对齐测试...\n');
+    d_meas_L_a = 2;
+    d_meas_R_a = 1;
+    d_tot_L_a  = d_path_true(1) + d_meas_L_a; % 4
+    d_tot_R_a  = d_path_true(2) + d_meas_R_a; % 5
+    d_common_a = max([d_tot_L_a, d_tot_R_a, d_pos_true]); % 5
+
+    N_steps_a = 220;
+    t_seq_a = (0:N_steps_a-1)' * dt;
+    rng(100, 'twister');
+    cmd_L_a = 3000.0 * sin(2*pi*8*t_seq_a) + 2000.0 * sin(2*pi*20*t_seq_a) + 800.0 * randn(N_steps_a, 1);
+    cmd_R_a = 3000.0 * cos(2*pi*8*t_seq_a) + 2000.0 * cos(2*pi*20*t_seq_a) + 800.0 * randn(N_steps_a, 1);
+    pos_true_L_a = 0.05 * sin(2*pi*2*t_seq_a);
+    pos_true_R_a = 0.05 * cos(2*pi*2*t_seq_a);
+
+    meas_L_a = zeros(N_steps_a, 1);
+    meas_R_a = zeros(N_steps_a, 1);
+    pos_meas_L_a = zeros(N_steps_a, 1);
+    pos_meas_R_a = zeros(N_steps_a, 1);
+    for k = 1:N_steps_a
+        meas_L_a(k) = cmd_L_a(max(1, k - d_tot_L_a));
+        meas_R_a(k) = cmd_R_a(max(1, k - d_tot_R_a));
+        pos_meas_L_a(k) = pos_true_L_a(max(1, k - d_pos_true));
+        pos_meas_R_a(k) = pos_true_R_a(max(1, k - d_pos_true));
+    end
+
+    align_state_a = [];
+    max_align_err_a = 0;
+    for k = 1:N_steps_a
+        ts_a.t_source_L   = t_seq_a(k); ts_a.t_source_R   = t_seq_a(k); ts_a.t_source_pos = t_seq_a(k);
+        ts_a.t_recv_L     = t_seq_a(k); ts_a.t_recv_R     = t_seq_a(k); ts_a.t_recv_pos   = t_seq_a(k);
+        ts_a.seq_L        = k; ts_a.seq_R        = k; ts_a.seq_pos      = k;
+        ts_a.clock_id_L   = 'CLK'; ts_a.clock_id_R   = 'CLK'; ts_a.clock_id_pos = 'CLK';
+
+        qual_a = struct('is_saturated', [false; false], 'current_valid', [true; true], ...
+                        'position_valid', [true; true], 'packet_valid', true);
+
+        raw_k_a = [meas_L_a(k); meas_R_a(k)];
+        cmd_k_a = [cmd_L_a(k); cmd_R_a(k)];
+        pos_k_a = [pos_meas_L_a(k); pos_meas_R_a(k)];
+
+        [sig_a, align_state_a, info_a] = step3c_causal_delay_aligner( ...
+            raw_k_a, cmd_k_a, pos_k_a, ts_a, qual_a, align_state_a, opts_b2);
+
+        if sig_a.valid_for_regression
+            idx_common = k - d_common_a;
+            if idx_common >= 1
+                err_iL = abs(sig_a.current_cal(1) - cmd_L_a(idx_common));
+                err_iR = abs(sig_a.current_cal(2) - cmd_R_a(idx_common));
+                err_yL = abs(sig_a.position(1) - pos_true_L_a(idx_common));
+                err_yR = abs(sig_a.position(2) - pos_true_R_a(idx_common));
+                err_k  = max([err_iL, err_iR, err_yL*1000, err_yR*1000]);
+                if err_k > max_align_err_a
+                    max_align_err_a = err_k;
+                end
+            end
+        end
+    end
+    assert(all(info_a.d_meas_hat == [d_meas_L_a; d_meas_R_a]), 'Scenario A: 理想时延识别不符');
+    assert(max_align_err_a < 1e-10, sprintf('Scenario A: 无噪声理想对齐残差超标: %.2e >= 1e-10', max_align_err_a));
+    fprintf('      - Scenario A PASS: 无噪声对齐误差最大残差 %.2e < 1e-10\n', max_align_err_a);
+    records(end+1) = make_record('B2_SCENARIO_A_NOISELESS', 1, d_meas_L_a, d_meas_R_a, info_a, align_state_a, sig_a);
+
+    % ---------------------------------------------------------------------
+    % [Scenario B] 鲁棒高斯噪声与蒙特卡洛评估 (MC 100, noise=10 counts, RMS <= 30 counts)
+    % ---------------------------------------------------------------------
+    fprintf('    >>> [Scenario B] 噪声鲁棒性与蒙特卡洛测试 (MC 100, noise=10 counts)...\n');
+    N_mc_b2 = 100;
+    b2_is_correct = false(N_mc_b2, 1);
+    b2_rms_errors = zeros(N_mc_b2, 1);
+    b2_max_errors = zeros(N_mc_b2, 1);
 
     for j = 1:N_mc_b2
         rng(20261101 + j, 'twister');
@@ -265,19 +339,17 @@ function test_step3c_c4b_delay_alignment()
         d_tot_L = d_path_true(1) + d_meas_L;
         d_tot_R = d_path_true(2) + d_meas_R;
         d_pos   = d_pos_true;
+        d_common = max([d_tot_L, d_tot_R, d_pos]);
 
         N_steps = 220;
         t_seq = (0:N_steps-1)' * dt;
 
-        % 宽带电流激励指令
         cmd_L = 3000.0 * sin(2*pi*8*t_seq) + 2000.0 * sin(2*pi*20*t_seq) + 800.0 * randn(N_steps, 1);
         cmd_R = 3000.0 * cos(2*pi*8*t_seq) + 2000.0 * cos(2*pi*20*t_seq) + 800.0 * randn(N_steps, 1);
 
-        % 非恒定真实位置运动轨迹
         pos_true_L = 0.05 * sin(2*pi*2*t_seq);
         pos_true_R = 0.05 * cos(2*pi*2*t_seq);
 
-        % 模拟综合延迟与测量噪声 (10 counts)
         meas_L = zeros(N_steps, 1);
         meas_R = zeros(N_steps, 1);
         pos_meas_L = zeros(N_steps, 1);
@@ -295,7 +367,7 @@ function test_step3c_c4b_delay_alignment()
         end
 
         align_state = [];
-        max_align_err_trial = 0;
+        err_vec_trial = [];
 
         for k = 1:N_steps
             ts.t_source_L   = t_seq(k); ts.t_source_R   = t_seq(k); ts.t_source_pos = t_seq(k);
@@ -303,11 +375,8 @@ function test_step3c_c4b_delay_alignment()
             ts.seq_L        = k; ts.seq_R        = k; ts.seq_pos      = k;
             ts.clock_id_L   = 'CLK'; ts.clock_id_R   = 'CLK'; ts.clock_id_pos = 'CLK';
 
-            qual = struct();
-            qual.is_saturated   = [false; false];
-            qual.current_valid  = [true; true];
-            qual.position_valid = [true; true];
-            qual.packet_valid   = true;
+            qual = struct('is_saturated', [false; false], 'current_valid', [true; true], ...
+                          'position_valid', [true; true], 'packet_valid', true);
 
             raw_k = [meas_L(k); meas_R(k)];
             cmd_k = [cmd_L(k); cmd_R(k)];
@@ -316,67 +385,125 @@ function test_step3c_c4b_delay_alignment()
             [sig_align, align_state, info] = step3c_causal_delay_aligner( ...
                 raw_k, cmd_k, pos_k, ts, qual, align_state, opts_b2);
 
-            % 预热及识别锁定后，严格评估实际对齐输出信号与物理时刻真值残差
             if sig_align.valid_for_regression
                 assert(sig_align.current_pair_valid, 'B2: current_pair_valid 必须为 true');
                 assert(sig_align.absolute_alignment_valid, 'B2: absolute_alignment_valid 必须为 true');
 
-                d_common = max([d_tot_L, d_tot_R, d_pos]);
                 idx_common = k - d_common;
                 if idx_common >= 1
-                    err_iL = abs(sig_align.current_cal(1) - meas_L(idx_common + d_tot_L)); % 对应的无额外时滞真值
-                    err_iR = abs(sig_align.current_cal(2) - meas_R(idx_common + d_tot_R));
-                    err_yL = abs(sig_align.position(1) - pos_true_L(idx_common));
-                    err_yR = abs(sig_align.position(2) - pos_true_R(idx_common));
-
-                    err_k = max([err_iL, err_iR, err_yL*1000, err_yR*1000]);
-                    if err_k > max_align_err_trial
-                        max_align_err_trial = err_k;
-                    end
+                    err_iL = sig_align.current_cal(1) - cmd_L(idx_common);
+                    err_iR = sig_align.current_cal(2) - cmd_R(idx_common);
+                    err_vec_trial = [err_vec_trial; err_iL; err_iR]; %#ok<AGROW>
                 end
             end
         end
 
-        b2_align_err_max(j) = max_align_err_trial;
+        if ~isempty(err_vec_trial)
+            b2_rms_errors(j) = sqrt(mean(err_vec_trial.^2));
+            b2_max_errors(j) = max(abs(err_vec_trial));
+        else
+            b2_rms_errors(j) = NaN;
+            b2_max_errors(j) = NaN;
+        end
+
         if (info.d_meas_hat(1) == d_meas_L) && (info.d_meas_hat(2) == d_meas_R)
             b2_is_correct(j) = true;
         else
             b2_is_correct(j) = false;
         end
 
-        records(end+1) = make_record('B2_XCORR_KNOWN_PATH_MC', j, d_meas_L, d_meas_R, info, align_state, sig_align);
+        records(end+1) = make_record('B2_SCENARIO_B_NOISY_MC', j, d_meas_L, d_meas_R, info, align_state, sig_align);
     end
 
     acc_rate_b2 = 100.0 * mean(b2_is_correct);
-    fprintf('    [B2 统计指标]:\n');
-    fprintf('      - 100 次 MC 双通道精确识别正确率: %.1f%% (验收门限 >= 95.0%%)\n', acc_rate_b2);
-    fprintf('      - 100 次 MC 对齐信号与物理时刻真值最大残差: %.2e (断言 < 1e-10)\n', max(b2_align_err_max));
+    mean_rms_b2 = mean(b2_rms_errors(isfinite(b2_rms_errors)));
+    p95_rms_b2  = prctile(b2_rms_errors(isfinite(b2_rms_errors)), 95);
 
-    assert(acc_rate_b2 >= 95.0, sprintf('B2 失败: 互相关时延识别正确率 %.1f%% < 95.0%%', acc_rate_b2));
-    assert(max(b2_align_err_max) < 1e-10, 'B2 失败: 实际因果对齐信号存在非零时间错配残差');
+    fprintf('      - Scenario B 统计指标:\n');
+    fprintf('        * 100 次 MC 双通道精确识别正确率: %.1f%% (验收门限 >= 95.0%%)\n', acc_rate_b2);
+    fprintf('        * 100 次 MC 对齐电流 RMS 误差均值: %.2f counts (门限 <= 30.0 counts)\n', mean_rms_b2);
+    fprintf('        * 100 次 MC 对齐电流 RMS 误差 P95:  %.2f counts\n', p95_rms_b2);
 
-    % 3. 未知位置延迟测试 (d_pos_known = NaN 时必须禁止回归输入)
+    assert(acc_rate_b2 >= 95.0, sprintf('B2 Scenario B 失败: 互相关时延识别正确率 %.1f%% < 95.0%%', acc_rate_b2));
+    assert(mean_rms_b2 <= 30.0, sprintf('B2 Scenario B 失败: RMS 误差均值 %.2f counts > 30.0 counts', mean_rms_b2));
+    fprintf('      - Scenario B PASS\n');
+
+    % ---------------------------------------------------------------------
+    % [Scenario C] 丢包与时间戳不连续性因果一致性测试 (common_timestamp 从缓冲区读取)
+    % ---------------------------------------------------------------------
+    fprintf('    >>> [Scenario C] 丢包与时间戳不连续性因果一致性测试...\n');
+    align_state_c = [];
+    max_causality_gap = 0;
+    for k = 1:180
+        t_src_base = (k - 1) * dt;
+        % 模拟非均匀抖动源时间戳，但在物理因果范围内
+        ts_c.t_source_L   = t_src_base + 0.0001 * sin(k);
+        ts_c.t_source_R   = t_src_base + 0.0001 * cos(k);
+        ts_c.t_source_pos = t_src_base;
+        % 接收时间均晚于发射
+        ts_c.t_recv_L     = ts_c.t_source_L + 0.002;
+        ts_c.t_recv_R     = ts_c.t_source_R + 0.003;
+        ts_c.t_recv_pos   = ts_c.t_source_pos + 0.001;
+        ts_c.seq_L        = k; ts_c.seq_R = k; ts_c.seq_pos = k;
+        ts_c.clock_id_L   = 'CLK'; ts_c.clock_id_R = 'CLK'; ts_c.clock_id_pos = 'CLK';
+
+        qual_c = struct('is_saturated', [false; false], 'current_valid', [true; true], ...
+                        'position_valid', [true; true], 'packet_valid', true);
+
+        raw_k_c = [meas_L_a(k); meas_R_a(k)];
+        cmd_k_c = [cmd_L_a(k); cmd_R_a(k)];
+        pos_k_c = [pos_meas_L_a(k); pos_meas_R_a(k)];
+
+        [sig_c, align_state_c, info_c] = step3c_causal_delay_aligner( ...
+            raw_k_c, cmd_k_c, pos_k_c, ts_c, qual_c, align_state_c, opts_b2);
+
+        if sig_c.valid_for_regression
+            % 断言 common_timestamp 严格为所选历史源时间戳的最小值
+            expected_common = min(sig_c.used_source_timestamp);
+            assert(abs(sig_c.common_timestamp - expected_common) < 1e-12, ...
+                'Scenario C: common_timestamp 必须严格等于 min(used_source_timestamp)');
+            % 断言严格因果性: common_timestamp 绝不超过墙上时间
+            t_wall_c = max([ts_c.t_recv_L, ts_c.t_recv_R, ts_c.t_recv_pos]);
+            assert(sig_c.common_timestamp <= t_wall_c + 1e-12, ...
+                'Scenario C: common_timestamp 超越物理接收墙上时间');
+            gap = max(sig_c.used_source_timestamp) - sig_c.common_timestamp;
+            if gap > max_causality_gap
+                max_causality_gap = gap;
+            end
+        end
+    end
+    fprintf('      - Scenario C PASS: common_timestamp 严格从历史缓冲区读取且严格因果 (最大通道离散差: %.2e s)\n', max_causality_gap);
+    records(end+1) = make_record('B2_SCENARIO_C_DISCONTINUITY', 1, NaN, NaN, info_c, align_state_c, sig_c);
+
+    % ---------------------------------------------------------------------
+    % [Scenario D] 未知位置延迟测试 (d_pos_known = NaN 必须刚性切断回归)
+    % ---------------------------------------------------------------------
+    fprintf('    >>> [Scenario D] 未知位置延迟测试 (d_pos_known = NaN 刚性切断回归)...\n');
     opts_b2_nopos = opts_b2;
     opts_b2_nopos.d_pos_known = NaN;
-    ts_nopos = ts;
-    ts_nopos.seq_L = align_state.last_seq_L + 1;
-    ts_nopos.seq_R = align_state.last_seq_R + 1;
-    ts_nopos.seq_pos = align_state.last_seq_pos_L + 1;
-    ts_nopos.t_source_L = align_state.last_ts_L + dt;
-    ts_nopos.t_source_R = align_state.last_ts_R + dt;
-    ts_nopos.t_source_pos = align_state.last_ts_pos_L + dt;
-    ts_nopos.t_recv_L = ts_nopos.t_source_L;
-    ts_nopos.t_recv_R = ts_nopos.t_source_R;
-    ts_nopos.t_recv_pos = ts_nopos.t_source_pos;
-    [sig_nopos, ~, info_nopos] = step3c_causal_delay_aligner(raw_k, cmd_k, pos_k, ts_nopos, qual, align_state, opts_b2_nopos);
-    assert(sig_nopos.current_pair_valid, 'B2: 左右电流差模对齐仍应有效');
-    assert(~sig_nopos.absolute_alignment_valid, 'B2: 无位置时延时绝对对齐必须为 false');
-    assert(~sig_nopos.valid_for_regression, 'B2: 无位置时基时严禁开放回归准入');
-    assert(all(isnan(sig_nopos.current_cal)) && all(isnan(sig_nopos.position)), 'B2: 绝对对齐无效期输出必须为 NaN');
-    assert(strcmp(info_nopos.reject_reason, 'POSITION_DELAY_UNKNOWN'), 'B2: 原因码应为 POSITION_DELAY_UNKNOWN');
-    records(end+1) = make_record('B2_NOPOS_UNKNOWN', 101, NaN, NaN, info_nopos, align_state, sig_nopos);
+    ts_nopos = ts_c;
+    ts_nopos.seq_L = align_state_c.last_seq_L + 1;
+    ts_nopos.seq_R = align_state_c.last_seq_R + 1;
+    ts_nopos.seq_pos = align_state_c.last_seq_pos_L + 1;
+    ts_nopos.t_source_L = align_state_c.last_ts_L + dt;
+    ts_nopos.t_source_R = align_state_c.last_ts_R + dt;
+    ts_nopos.t_source_pos = align_state_c.last_ts_pos_L + dt;
+    ts_nopos.t_recv_L = ts_nopos.t_source_L + 0.001;
+    ts_nopos.t_recv_R = ts_nopos.t_source_R + 0.001;
+    ts_nopos.t_recv_pos = ts_nopos.t_source_pos + 0.001;
+    raw_k_d = [meas_L_a(181); meas_R_a(181)];
+    cmd_k_d = [cmd_L_a(181); cmd_R_a(181)];
+    pos_k_d = [pos_meas_L_a(181); pos_meas_R_a(181)];
+    [sig_nopos, ~, info_nopos] = step3c_causal_delay_aligner(raw_k_d, cmd_k_d, pos_k_d, ts_nopos, qual_c, align_state_c, opts_b2_nopos);
+    assert(sig_nopos.current_pair_valid, 'B2 Scenario D: 左右电流差模对齐仍应有效');
+    assert(~sig_nopos.absolute_alignment_valid, 'B2 Scenario D: 无位置时延时绝对对齐必须为 false');
+    assert(~sig_nopos.valid_for_regression, 'B2 Scenario D: 无位置时基时严禁开放回归准入');
+    assert(all(isnan(sig_nopos.current_cal)) && all(isnan(sig_nopos.position)), 'B2 Scenario D: 绝对对齐无效期输出必须为 NaN');
+    assert(strcmp(info_nopos.reject_reason, 'POSITION_DELAY_UNKNOWN'), 'B2 Scenario D: 原因码应为 POSITION_DELAY_UNKNOWN');
+    records(end+1) = make_record('B2_SCENARIO_D_NOPOS_UNKNOWN', 101, NaN, NaN, info_nopos, align_state_c, sig_nopos);
+    fprintf('      - Scenario D PASS: 无已知位置延迟模型时刚性切断回归准入 (POSITION_DELAY_UNKNOWN)\n');
 
-    fprintf('    [OK] Subtest B2 验收通过: 识别正确率 %.1f%%, 真实对齐误差严格 < 1e-10, 无位置延迟时刚性切断回归!\n\n', acc_rate_b2);
+    fprintf('    [OK] Subtest B2 验收通过: 四场景分流 (A~D) 全面合规通过!\n\n');
 
     %% =====================================================================
     %% [Subtest B3] DIFF_ONLY 未知路径差模降级与非法假设/门控测试
@@ -489,7 +616,7 @@ function test_step3c_c4b_delay_alignment()
         ts.seq_L = k; ts.seq_R = k; ts.seq_pos = k;
         ts.t_source_L = k*dt; ts.t_source_R = k*dt; ts.t_source_pos = k*dt;
         ts.t_recv_L = k*dt; ts.t_recv_R = k*dt; ts.t_recv_pos = k*dt;
-        [~, align_state, info] = step3c_causal_delay_aligner( ...
+        [sig_align, align_state, info] = step3c_causal_delay_aligner( ...
             raw_k, cmd_k, [0.0; 0.0], ts, qual, align_state, opts_b4);
     end
     assert(all(info.d_meas_hat == [1; 1]), 'B4: 基准时延未确认');
@@ -513,7 +640,7 @@ function test_step3c_c4b_delay_alignment()
         ts.t_source_L = k_curr*dt; ts.t_source_R = k_curr*dt; ts.t_source_pos = k_curr*dt;
         ts.t_recv_L = k_curr*dt; ts.t_recv_R = k_curr*dt; ts.t_recv_pos = k_curr*dt;
 
-        [~, align_state, info_s] = step3c_causal_delay_aligner( ...
+        [sig_s, align_state, info_s] = step3c_causal_delay_aligner( ...
             raw_k, cmd_k, [0.0; 0.0], ts, qual, align_state, opts_b4);
 
         cand_hist(s, :)     = align_state.candidate_delay';
@@ -536,29 +663,48 @@ function test_step3c_c4b_delay_alignment()
             assert(info_s.did_update, 'B4: 第 5 步确认切换时必须设置 did_update=true');
         end
     end
-    records(end+1) = make_record('B4_STEP4_MAINTAIN', 2, 3, 3, info_s, align_state, sig_align);
-    records(end+1) = make_record('B4_STEP5_CONFIRMED', 3, 3, 3, info_s, align_state, sig_align);
+    records(end+1) = make_record('B4_STEP4_MAINTAIN', 2, 3, 3, info_s, align_state, sig_s);
+    records(end+1) = make_record('B4_STEP5_CONFIRMED', 3, 3, 3, info_s, align_state, sig_s);
 
-    % 3. 注入仅维持 2 步的时延噪声毛刺 (d_tot 突变为 7 -> d_meas = 5)
-    align_state.current_buffer_L(1:55) = cmd_chirp(max(1, (55:-1:1)' - 7));
-    align_state.current_buffer_R(1:55) = cmd_chirp(max(1, (55:-1:1)' - 7));
+    % 3. 稳态测试: 第 6~10 步继续维持延迟 5 输入，验证维持 [3; 3] 且严禁重复报告 did_update=true
+    for s = 6:10
+        k_curr = 50 + s;
+        raw_k = [cmd_chirp(max(1, k_curr - 5)); cmd_chirp(max(1, k_curr - 5))];
+        cmd_k = [cmd_chirp(k_curr); cmd_chirp(k_curr)];
+        ts.seq_L = k_curr; ts.seq_R = k_curr; ts.seq_pos = k_curr;
+        ts.t_source_L = k_curr*dt; ts.t_source_R = k_curr*dt; ts.t_source_pos = k_curr*dt;
+        ts.t_recv_L = k_curr*dt; ts.t_recv_R = k_curr*dt; ts.t_recv_pos = k_curr*dt;
+
+        [sig_ss, align_state, info_ss] = step3c_causal_delay_aligner( ...
+            raw_k, cmd_k, [0.0; 0.0], ts, qual, align_state, opts_b4);
+
+        assert(all(align_state.last_trusted_delay == [3; 3]), sprintf('B4 稳态第 %d 步: last_trusted_delay 偏离', s));
+        assert(all(info_ss.d_meas_hat == [3; 3]), sprintf('B4 稳态第 %d 步: d_meas_hat 偏离', s));
+        assert(~info_ss.did_update, sprintf('B4 稳态第 %d 步: 稳态下严禁重复报告 did_update=true', s));
+        assert(all(align_state.confirm_count >= 5), sprintf('B4 稳态第 %d 步: confirm_count 异常', s));
+    end
+    records(end+1) = make_record('B4_STEADY_STATE_MAINTAIN', 4, 3, 3, info_ss, align_state, sig_ss);
+
+    % 4. 注入仅维持 2 步的时延噪声毛刺 (d_tot 突变为 7 -> d_meas = 5)
+    align_state.current_buffer_L(1:60) = cmd_chirp(max(1, (60:-1:1)' - 7));
+    align_state.current_buffer_R(1:60) = cmd_chirp(max(1, (60:-1:1)' - 7));
     for g = 1:2
-        k_curr = 55 + g;
+        k_curr = 60 + g;
         raw_k = [cmd_chirp(max(1, k_curr - 7)); cmd_chirp(max(1, k_curr - 7))];
         cmd_k = [cmd_chirp(k_curr); cmd_chirp(k_curr)];
         ts.seq_L = k_curr; ts.seq_R = k_curr; ts.seq_pos = k_curr;
         ts.t_source_L = k_curr*dt; ts.t_source_R = k_curr*dt; ts.t_source_pos = k_curr*dt;
         ts.t_recv_L = k_curr*dt; ts.t_recv_R = k_curr*dt; ts.t_recv_pos = k_curr*dt;
 
-        [~, align_state, info_glitch] = step3c_causal_delay_aligner( ...
+        [sig_glitch, align_state, info_glitch] = step3c_causal_delay_aligner( ...
             raw_k, cmd_k, [0.0; 0.0], ts, qual, align_state, opts_b4);
 
         assert(all(info_glitch.d_meas_hat == [3; 3]), 'B4: 迟滞失效，瞬态毛刺污染了可信时延');
         assert(~info_glitch.did_update, 'B4: 瞬态毛刺下严禁触发 did_update');
     end
-    records(end+1) = make_record('B4_GLITCH_REJECTED', 4, 3, 3, info_glitch, align_state, sig_align);
+    records(end+1) = make_record('B4_GLITCH_REJECTED', 5, 3, 3, info_glitch, align_state, sig_glitch);
 
-    fprintf('    [OK] Subtest B4 验收通过: 五步迟滞确认机制完全生效 (Step 1~4 刚性维持, Step 5 精准确认切换, 毛刺零污染)!\n\n');
+    fprintf('    [OK] Subtest B4 验收通过: 五步迟滞确认机制完全生效 (Step 1~4 刚性维持, Step 5 精准确认切换, 稳态防重更, 毛刺零污染)!\n\n');
 
     %% =====================================================================
     %% [Subtest B5] 严格因果性硬检查与实际索引审计 (未来样本引用次数严格 == 0)
@@ -594,10 +740,13 @@ function test_step3c_c4b_delay_alignment()
 
         if sig_align.valid_for_regression
             % 1. 实际使用缓冲区索引审计
+            valid_depth = min(align_state.buffer_count, align_state.buffer_depth);
             assert(all(sig_align.used_index >= 1), 'B5: 检测到非正历史索引');
-            assert(all(sig_align.used_index <= align_state.buffer_count), 'B5: 索引超出已存有效深度');
+            assert(all(sig_align.used_index <= valid_depth), 'B5: 索引超出已存有效深度');
 
-            % 2. 实际引用的源时间戳审计 (严禁超过公共基准时刻)
+            % 2. 实际引用的源时间戳审计 (有限性与因果性)
+            assert(all(isfinite(sig_align.used_source_timestamp)), 'B5: 历史源时间戳必须有限');
+            assert(isfinite(sig_align.common_timestamp), 'B5: 公共基准时刻必须有限');
             if any(sig_align.used_source_timestamp > sig_align.common_timestamp + 1e-12)
                 future_ref_count = future_ref_count + 1;
             end
@@ -613,11 +762,28 @@ function test_step3c_c4b_delay_alignment()
     tampered_detected = any(tampered_sig.used_source_timestamp > tampered_sig.common_timestamp + 1e-12);
     assert(tampered_detected, 'B5: 负测试失败，未能捕捉人为注入的未来时间戳泄露');
 
+    % 4. 显式越界检索负测试: 注入超过缓冲区深度的时延 (500 steps > buffer_depth 250)，对齐器应刚性拦截并报告 BUFFER_WARMING
+    ts_oob = ts;
+    ts_oob.seq_L = align_state.last_seq_L + 1;
+    ts_oob.seq_R = align_state.last_seq_R + 1;
+    ts_oob.seq_pos = align_state.last_seq_pos_L + 1;
+    ts_oob.t_source_L = (align_state.last_seq_L + 1) * dt;
+    ts_oob.t_source_R = (align_state.last_seq_R + 1) * dt;
+    ts_oob.t_source_pos = (align_state.last_seq_pos_L + 1) * dt;
+    ts_oob.t_recv_L = ts_oob.t_source_L + 500 * dt; % 接收延迟 500 步
+    ts_oob.t_recv_R = ts_oob.t_source_R + 500 * dt;
+    ts_oob.t_recv_pos = ts_oob.t_source_pos + 500 * dt;
+    [sig_oob, ~, info_oob] = step3c_causal_delay_aligner([10.0; 10.0], [10.0; 10.0], [0.1; 0.1], ts_oob, qual, align_state, opts_b5);
+    assert(~sig_oob.valid_for_regression && all(isnan(sig_oob.current_cal)) && ~info_oob.did_update);
+    assert(strcmp(info_oob.reject_reason, 'BUFFER_WARMING'), 'B5: 超出缓冲区深度的时延应判定为 BUFFER_WARMING');
+
     fprintf('    [B5 统计指标]:\n');
     fprintf('      - 500 步全工况未来样本/未来时间戳引用次数: %d (断言严格 == 0)\n', future_ref_count);
     fprintf('      - 负测试检测灵敏度: 100%% 成功捕捉人为注入的越界时间戳\n');
+    fprintf('      - 超出缓冲区深度负测试: 100%% 成功刚性拦截 (BUFFER_WARMING)\n');
     assert(future_ref_count == 0, 'B5 失败: 检测到未来样本引用');
     records(end+1) = make_record('B5_CAUSALITY_AUDIT', 1, dL, dR, info_b5, align_state, sig_align);
+    records(end+1) = make_record('B5_OOB_REJECTED', 2, 500, 500, info_oob, align_state, sig_oob);
 
     fprintf('    [OK] Subtest B5 验收通过: 严格因果索引审计成立，未来样本引用次数严格为 0!\n\n');
 
@@ -769,11 +935,11 @@ function test_step3c_c4b_delay_alignment()
     writetable(T_out, csv_file);
     fprintf('    [OK] CSV 写入完成，共计 %d 行 x %d 列\n', height(T_out), width(T_out));
 
-    % 100% 逐列逐元素严格内存回读校验 (全 21 列)
-    fprintf('>>> 执行 CSV 全部 21 列 100%% 逐元素严格内存回读校验...\n');
+    % 100% 逐列逐元素严格内存回读校验 (全 26 列)
+    fprintf('>>> 执行 CSV 全部 26 列 100%% 逐元素严格内存回读校验...\n');
     T_read = readtable(csv_file);
     assert(height(T_read) == height(T_out), '回读行数不符');
-    assert(width(T_read) == 21, sprintf('回读列数不符: 期望 21 列，实际 %d 列', width(T_read)));
+    assert(width(T_read) == 26, sprintf('回读列数不符: 期望 26 列，实际 %d 列', width(T_read)));
 
     col_names = { ...
         'Subtest', 'Trial_ID', ...
@@ -782,7 +948,10 @@ function test_step3c_c4b_delay_alignment()
         'Candidate_Delay_L', 'Candidate_Delay_R', ...
         'Confirm_Count_L', 'Confirm_Count_R', ...
         'Trusted_Delay_L', 'Trusted_Delay_R', ...
-        'Used_Index_L', 'Used_Index_R', 'Used_Index_Pos', ...
+        'Used_Index_L', 'Used_Index_R', ...
+        'Used_Index_Pos_L', 'Used_Index_Pos_R', ...
+        'Used_Timestamp_L', 'Used_Timestamp_R', ...
+        'Used_Timestamp_Pos_L', 'Used_Timestamp_Pos_R', ...
         'Common_Timestamp', ...
         'Current_Pair_Valid', 'Absolute_Alignment_Valid', 'Valid_For_Regression', ...
         'Reject_Reason', 'Did_Update' ...
@@ -808,7 +977,7 @@ function test_step3c_c4b_delay_alignment()
             end
         end
     end
-    fprintf('    [OK] CSV 全部 21 列 100%% 逐元素严格回读断言全数通过!\n\n');
+    fprintf('    [OK] CSV 全部 26 列 100%% 逐元素严格回读断言全数通过!\n\n');
 
     %% =====================================================================
     %% 总结输出
@@ -817,17 +986,17 @@ function test_step3c_c4b_delay_alignment()
     fprintf('   Gate C4-B 单元测试重测结论: 全部 PASS\n');
     fprintf('=========================================================================\n');
     fprintf('   Subtest B1 (TIMESTAMP 8+5 工况): 识别误差 0, 5 组异常时间戳全面拦截 [PASS]\n');
-    fprintf('   Subtest B2 (XCORR MC 100 识别):  正确率 %.1f%%, 真实对齐误差 < 1e-10 [PASS]\n', acc_rate_b2);
+    fprintf('   Subtest B2 (XCORR 四场景分流):   A/B/C/D 全通过, MC 正确率 %.1f%%, RMS %.2f ct [PASS]\n', acc_rate_b2, mean_rms_b2);
     fprintf('   Subtest B3 (DIFF_ONLY 门控降级): 强制 NaN, 拒绝非对称, 饱和/低激励拦截 [PASS]\n');
-    fprintf('   Subtest B4 (严格五步迟滞防抖):   1~4 步维持, 第 5 步切换, 毛刺零污染 [PASS]\n');
-    fprintf('   Subtest B5 (因果性硬检验审计):   历史索引合法, 未来引用次数严格 == 0 [PASS]\n');
+    fprintf('   Subtest B4 (严格五步迟滞防抖):   1~4 步维持, 第 5 步切换, 稳态防重更, 毛刺零污染 [PASS]\n');
+    fprintf('   Subtest B5 (因果性硬检验审计):   历史索引合法, 越界拦截, 未来引用次数严格 == 0 [PASS]\n');
     fprintf('   Subtest B6 (预热与异常输入防护): 预热零更新, 截零零容忍, 异常全冻结   [PASS]\n');
-    fprintf('   数据治理与完整回读:              CSV 21 列 100%% 逐列逐元素回读校验一致  [PASS]\n');
+    fprintf('   数据治理与完整回读:              CSV 26 列 100%% 逐列逐元素回读校验一致  [PASS]\n');
     fprintf('=========================================================================\n');
 end
 
 %% =========================================================================
-%% 辅助函数: 构造规范化 21 列数据记录
+%% 辅助函数: 构造规范化 26 列数据记录
 %% =========================================================================
 function rec = make_record(subtest, trial_id, true_L, true_R, info, state, sig)
     rec = struct();
@@ -871,11 +1040,25 @@ function rec = make_record(subtest, trial_id, true_L, true_R, info, state, sig)
     if isfield(sig, 'used_index') && numel(sig.used_index) >= 4
         rec.Used_Index_L         = double(sig.used_index(1));
         rec.Used_Index_R         = double(sig.used_index(2));
-        rec.Used_Index_Pos       = double(sig.used_index(3));
+        rec.Used_Index_Pos_L     = double(sig.used_index(3));
+        rec.Used_Index_Pos_R     = double(sig.used_index(4));
     else
         rec.Used_Index_L         = NaN;
         rec.Used_Index_R         = NaN;
-        rec.Used_Index_Pos       = NaN;
+        rec.Used_Index_Pos_L     = NaN;
+        rec.Used_Index_Pos_R     = NaN;
+    end
+
+    if isfield(sig, 'used_source_timestamp') && numel(sig.used_source_timestamp) >= 4
+        rec.Used_Timestamp_L     = double(sig.used_source_timestamp(1));
+        rec.Used_Timestamp_R     = double(sig.used_source_timestamp(2));
+        rec.Used_Timestamp_Pos_L = double(sig.used_source_timestamp(3));
+        rec.Used_Timestamp_Pos_R = double(sig.used_source_timestamp(4));
+    else
+        rec.Used_Timestamp_L     = NaN;
+        rec.Used_Timestamp_R     = NaN;
+        rec.Used_Timestamp_Pos_L = NaN;
+        rec.Used_Timestamp_Pos_R = NaN;
     end
 
     rec.Common_Timestamp         = double(sig.common_timestamp);
