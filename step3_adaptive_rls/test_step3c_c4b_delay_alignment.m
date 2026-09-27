@@ -475,6 +475,17 @@ function test_step3c_c4b_delay_alignment()
             assert(~sig_c.valid_for_regression, 'Scenario C: 丢包首帧严禁用于回归');
             assert(all(isnan(sig_c.current_cal)), 'Scenario C: 丢包首帧电流必须为 NaN');
             assert(all(isnan(sig_c.position)), 'Scenario C: 丢包首帧位置必须为 NaN');
+
+            assert(align_state_c.buffer_count == 0, ...
+                'Scenario C: SEQ_GAP 后 buffer_count 必须清零');
+            assert(~align_state_c.is_initialized, ...
+                'Scenario C: SEQ_GAP 后 is_initialized 必须为 false');
+            assert(all(isnan(align_state_c.last_trusted_delay)), ...
+                'Scenario C: SEQ_GAP 后可信时延必须清空');
+            assert(all(isnan(align_state_c.candidate_delay)), ...
+                'Scenario C: SEQ_GAP 后候选时延必须清空');
+            assert(all(align_state_c.confirm_count == 0), ...
+                'Scenario C: SEQ_GAP 后确认计数必须清零');
         end
 
         if sig_c.valid_for_regression
@@ -515,10 +526,11 @@ function test_step3c_c4b_delay_alignment()
     end
     assert(recovered_after_drop, 'Scenario C: 丢包后未恢复到有效回归状态');
     fprintf('      - Scenario C 统计指标:\n');
-    fprintf('        * 原始源时间戳跨度 (最大): %.4e s\n', max_raw_spread);
-    fprintf('        * 有效物理时刻跨度 (最大): %.4e s\n', max_eff_spread);
-    fprintf('        * 对齐容限:                %.4e s\n', opts_b2.timestamp_alignment_tolerance);
-    fprintf('      - Scenario C PASS: 丢包首帧精准报告 SEQ_GAP 并清空缓冲区，恢复后有效物理时刻跨度满足容限 (最大因果间隙: %.2e s)\n', max_causality_gap);
+    fprintf('        * 原始源时间戳跨度 (最大):             %.4e s\n', max_raw_spread);
+    fprintf('        * 原始源时间戳相对有效基准最大跨度:     %.4e s\n', max_causality_gap);
+    fprintf('        * 有效物理时刻跨度 (最大):             %.4e s\n', max_eff_spread);
+    fprintf('        * 对齐容限:                            %.4e s\n', opts_b2.timestamp_alignment_tolerance);
+    fprintf('      - Scenario C PASS: 丢包首帧精准报告 SEQ_GAP 并刚性清空内部状态，恢复后有效物理时刻跨度满足容限\n');
     records(end+1) = make_record('B2_SCENARIO_C_DISCONTINUITY', 1, NaN, NaN, info_c, align_state_c, sig_c);
 
     % ---------------------------------------------------------------------
