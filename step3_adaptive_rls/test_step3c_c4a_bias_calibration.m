@@ -183,7 +183,15 @@ function test_step3c_c4a_bias_calibration()
         'Case 10: 运动状态非有限 (Inf)', ...
             struct('iL', 0.0, 'iR', 0.0), ...
             struct('vG', 0.0, 'omega', Inf, 'aG', 0.0, 'drive_torque_disabled', true), ...
-            [10.0; 10.0], 'NONFINITE_INPUT'
+            [10.0; 10.0], 'NONFINITE_INPUT';
+        'Case 11: drive_torque_disabled 为 NaN', ...
+            struct('iL', 0.0, 'iR', 0.0), ...
+            struct('vG', 0.0, 'omega', 0.0, 'aG', 0.0, 'drive_torque_disabled', NaN), ...
+            [10.0; -10.0], 'NONFINITE_INPUT';
+        'Case 12: drive_torque_disabled 非布尔数值 (2)', ...
+            struct('iL', 0.0, 'iR', 0.0), ...
+            struct('vG', 0.0, 'omega', 0.0, 'aG', 0.0, 'drive_torque_disabled', 2), ...
+            [10.0; -10.0], 'NONFINITE_INPUT'
     };
 
     update_count_when_inadmissible = 0;
@@ -207,6 +215,7 @@ function test_step3c_c4a_bias_calibration()
             assert(strcmp(calib_state.mode, 'IDLE'), sprintf('A2 %s: 状态应保持 IDLE', c_name));
             assert(~calib_state.is_calibrated, sprintf('A2 %s: is_calibrated 应为 false', c_name));
             assert(all(isfinite(cal_out)), sprintf('A2 %s: 输出校准值必须有限', c_name));
+            assert(~info.did_update, sprintf('A2 %s: did_update 应为 false', c_name));
 
             if calib_state.valid_count > 0
                 update_count_when_inadmissible = update_count_when_inadmissible + 1;
@@ -217,6 +226,33 @@ function test_step3c_c4a_bias_calibration()
 
     assert(update_count_when_inadmissible == 0, ...
         sprintf('A2 失败: 非法准入时累计更新数 %d > 0', update_count_when_inadmissible));
+
+    % 输入契约边界硬错误检查 (必须触发 assert/error)
+    fprintf('    [A2 契约检查]: 验证非法维度/虚数输入触发契约断言...\n');
+    contract_err_3elem = false;
+    try
+        step3c_current_channel_calibrator([10.0; -10.0; 5.0], cmd_zero, motion_static, [], opts);
+    catch
+        contract_err_3elem = true;
+    end
+    assert(contract_err_3elem, 'A2 失败: 3 元素 current_raw 必须触发输入契约错误');
+
+    contract_err_1elem = false;
+    try
+        step3c_current_channel_calibrator(10.0, cmd_zero, motion_static, [], opts);
+    catch
+        contract_err_1elem = true;
+    end
+    assert(contract_err_1elem, 'A2 失败: 1 元素 current_raw 必须触发输入契约错误');
+
+    contract_err_complex = false;
+    try
+        step3c_current_channel_calibrator([10.0 + 1i; -10.0], cmd_zero, motion_static, [], opts);
+    catch
+        contract_err_complex = true;
+    end
+    assert(contract_err_complex, 'A2 失败: 虚数 current_raw 必须触发输入契约错误');
+    fprintf('    [OK] 输入契约硬检验通过: 3元素/标量/虚数输入均严格触发契约拒绝\n');
     fprintf('    [OK] Subtest A2 验收通过: 非法准入下累计更新次数严格为 0!\n\n');
 
     %% =====================================================================
@@ -292,6 +328,10 @@ function test_step3c_c4a_bias_calibration()
 
         assert(strcmp(calib_state.mode, 'FROZEN'), 'A4 运行中: 状态应锁定为 FROZEN');
         assert(calib_state.is_calibrated, 'A4 运行中: is_calibrated 应保持 true');
+        assert(info.is_calibrated, 'A4 运行中: info.is_calibrated 应保持 true');
+        assert(~info.is_admissible, 'A4 运行中: 驱动使能且运动工况下 is_admissible 必须为 false');
+        assert(strcmp(info.reject_reason, 'DRIVE_ENABLED'), 'A4 运行中: 原因码必须为 DRIVE_ENABLED');
+        assert(~info.did_update, 'A4 运行中: did_update 必须为 false');
 
         % 验证输出精确扣除了冻结零偏
         expected_cal = (raw_k - bias_before_motion) ./ [1.0; 1.0];
@@ -477,21 +517,43 @@ function test_step3c_c4a_bias_calibration()
     writetable(results_table, csv_file);
     fprintf('    [OK] CSV 写入完成，共计 %d 行 x %d 列\n', height(results_table), width(results_table));
 
-    % 100% 内存回读校验
-    fprintf('>>> 执行 CSV 100%% 逐元素回读校验...\n');
+    % 100% 内存回读校验 (全 15 列严格逐列逐元素)
+    fprintf('>>> 执行 CSV 全部 15 列 100%% 逐元素严格内存回读校验...\n');
     T_read = readtable(csv_file);
     assert(height(T_read) == 200, '回读行数必须为 200 行');
     assert(width(T_read) == 15, '回读列数必须为 15 列');
 
-    assert(max(abs(T_read.True_Bias_L_count - true_L_all)) < 1e-9, 'True_Bias_L 回读不匹配');
-    assert(max(abs(T_read.True_Bias_R_count - true_R_all)) < 1e-9, 'True_Bias_R 回读不匹配');
-    assert(max(abs(T_read.Est_Bias_L_count - est_L_all)) < 1e-9, 'Est_Bias_L 回读不匹配');
-    assert(max(abs(T_read.Est_Bias_R_count - est_R_all)) < 1e-9, 'Est_Bias_R 回读不匹配');
-    assert(max(abs(T_read.Err_Trial_Max_count - err_max_all)) < 1e-9, 'Err_Trial_Max 回读不匹配');
-    assert(all(strcmp(T_read.Subtest, subtest_all)), 'Subtest 字符串回读不匹配');
-    assert(all(strcmp(T_read.Calib_Mode, mode_all)), 'Calib_Mode 字符串回读不匹配');
-    assert(all(T_read.Is_Calibrated == is_calib_all), 'Is_Calibrated 回读不匹配');
-    fprintf('    [OK] CSV 100%% 逐元素严格回读断言全部通过!\n\n');
+    % 1. Trial_ID
+    assert(isequal(T_read.Trial_ID, trial_id_all), 'Col 1 Trial_ID 回读不匹配');
+    % 2. Subtest
+    assert(all(strcmp(T_read.Subtest, subtest_all)), 'Col 2 Subtest 字符串回读不匹配');
+    % 3. RNG_Seed
+    assert(isequal(T_read.RNG_Seed, seed_all), 'Col 3 RNG_Seed 回读不匹配');
+    % 4. True_Bias_L_count
+    assert(max(abs(T_read.True_Bias_L_count - true_L_all)) < 1e-9, 'Col 4 True_Bias_L 回读不匹配');
+    % 5. True_Bias_R_count
+    assert(max(abs(T_read.True_Bias_R_count - true_R_all)) < 1e-9, 'Col 5 True_Bias_R 回读不匹配');
+    % 6. Est_Bias_L_count
+    assert(max(abs(T_read.Est_Bias_L_count - est_L_all)) < 1e-9, 'Col 6 Est_Bias_L 回读不匹配');
+    % 7. Est_Bias_R_count
+    assert(max(abs(T_read.Est_Bias_R_count - est_R_all)) < 1e-9, 'Col 7 Est_Bias_R 回读不匹配');
+    % 8. Err_L_count
+    assert(max(abs(T_read.Err_L_count - err_L_all)) < 1e-9, 'Col 8 Err_L 回读不匹配');
+    % 9. Err_R_count
+    assert(max(abs(T_read.Err_R_count - err_R_all)) < 1e-9, 'Col 9 Err_R 回读不匹配');
+    % 10. Err_Trial_Max_count
+    assert(max(abs(T_read.Err_Trial_Max_count - err_max_all)) < 1e-9, 'Col 10 Err_Trial_Max 回读不匹配');
+    % 11. Is_Calibrated
+    assert(all(T_read.Is_Calibrated == is_calib_all), 'Col 11 Is_Calibrated 回读不匹配');
+    % 12. Calib_Mode
+    assert(all(strcmp(T_read.Calib_Mode, mode_all)), 'Col 12 Calib_Mode 字符串回读不匹配');
+    % 13. N_Eff_L
+    assert(isequal(T_read.N_Eff_L, N_eff_L_all), 'Col 13 N_Eff_L 回读不匹配');
+    % 14. N_Eff_R
+    assert(isequal(T_read.N_Eff_R, N_eff_R_all), 'Col 14 N_Eff_R 回读不匹配');
+    % 15. Within_P95_Threshold
+    assert(isequal(T_read.Within_P95_Threshold, pass_p95_all), 'Col 15 Within_P95_Threshold 回读不匹配');
+    fprintf('    [OK] CSV 全部 15 列 100%% 逐元素严格回读断言全数通过!\n\n');
 
     %% =====================================================================
     %% 总结输出

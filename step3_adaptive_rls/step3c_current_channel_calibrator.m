@@ -63,10 +63,10 @@ function [current_cal, calib_state_next, calib_info] = ...
     if ~isfield(opts, 'hampel_nsigma'), opts.hampel_nsigma = 3.0; end
     if ~isfield(opts, 'reset'), opts.reset = false; end
 
+    assert(isnumeric(current_raw) && isreal(current_raw) && ...
+           numel(current_raw) == 2, ...
+           'current_raw必须是包含两个实数元素的向量');
     current_raw = current_raw(:);
-    if numel(current_raw) < 2
-        error('current_raw 必须包含左右双轴回采电流');
-    end
 
     %% 2. 状态机初始化与显式重置
     if nargin < 4 || isempty(calib_state) || opts.reset
@@ -97,43 +97,21 @@ function [current_cal, calib_state_next, calib_info] = ...
     calib_info = struct();
     calib_info.is_admissible = false;
     calib_info.reject_reason = 'NONE';
+    calib_info.did_update    = false;
     calib_info.N_eff_L       = calib_state_next.N_eff_L;
     calib_info.N_eff_R       = calib_state_next.N_eff_R;
 
-    %% 3. 状态机流转逻辑
-    if strcmp(calib_state.mode, 'FROZEN')
-        % -----------------------------------------------------------------
-        % 状态 FROZEN: 标定完成，参数永久冻结，绝不被运动电流污染
-        % -----------------------------------------------------------------
-        calib_info.is_admissible = true;
-        calib_info.reject_reason = 'NONE';
-        calib_info.is_calibrated = true;
-        calib_info.bias_hat      = calib_state_next.bias_hat;
-        calib_info.gain_scale    = calib_state_next.gain_scale;
-        calib_info.mode          = 'FROZEN';
-        calib_info.N_eff_L       = calib_state_next.N_eff_L;
-        calib_info.N_eff_R       = calib_state_next.N_eff_R;
+    %% 3. 统一输入准入条件判据 (在 FROZEN 之前执行，客观诊断当前样本)
+    drive_flag_valid = isscalar(motion.drive_torque_disabled) && ...
+        (islogical(motion.drive_torque_disabled) || ...
+        (isnumeric(motion.drive_torque_disabled) && ...
+         isfinite(motion.drive_torque_disabled) && ...
+         any(motion.drive_torque_disabled == [0, 1])));
 
-        % 非有限值输入保护
-        raw_safe = current_raw;
-        if any(~isfinite(raw_safe))
-            raw_safe(~isfinite(raw_safe)) = calib_state_next.last_valid_raw(~isfinite(raw_safe));
-            calib_info.reject_reason = 'NONFINITE_INPUT';
-        else
-            calib_state_next.last_valid_raw = current_raw;
-        end
-
-        % 应用已冻结校准
-        current_cal = (raw_safe - calib_state_next.bias_hat) ./ calib_state_next.gain_scale;
-        return;
-    end
-
-    % ---------------------------------------------------------------------
-    % 状态 IDLE / ACCUMULATING: 严苛准入条件判据
-    % ---------------------------------------------------------------------
     is_finite_in = all(isfinite(current_raw)) && ...
                    isfinite(cmd.iL) && isfinite(cmd.iR) && ...
-                   isfinite(motion.vG) && isfinite(motion.omega) && isfinite(motion.aG);
+                   isfinite(motion.vG) && isfinite(motion.omega) && isfinite(motion.aG) && ...
+                   drive_flag_valid;
 
     if ~is_finite_in
         calib_info.reject_reason = 'NONFINITE_INPUT';
@@ -148,6 +126,30 @@ function [current_cal, calib_state_next, calib_info] = ...
         calib_info.is_admissible = true;
     end
 
+    % 非有限值输入保护
+    raw_safe = current_raw;
+    if any(~isfinite(raw_safe))
+        raw_safe(~isfinite(raw_safe)) = calib_state_next.last_valid_raw(~isfinite(raw_safe));
+    else
+        calib_state_next.last_valid_raw = current_raw;
+    end
+
+    %% 4. 状态机流转逻辑
+    if strcmp(calib_state.mode, 'FROZEN')
+        % -----------------------------------------------------------------
+        % 状态 FROZEN: 标定完成，参数永久冻结，绝不被运动电流污染
+        % -----------------------------------------------------------------
+        calib_info.is_calibrated = true;
+        calib_info.bias_hat      = calib_state_next.bias_hat;
+        calib_info.gain_scale    = calib_state_next.gain_scale;
+        calib_info.mode          = 'FROZEN';
+        calib_info.did_update    = false; % 冻结状态下绝不发生参数更新
+
+        % 扣除已冻结零偏并应用增益直通
+        current_cal = (raw_safe - calib_state_next.bias_hat) ./ calib_state_next.gain_scale;
+        return;
+    end
+
     if ~calib_info.is_admissible
         % 准入失败: 若先前处于 ACCUMULATING，立即中止并清空窗口，回退至 IDLE
         if strcmp(calib_state.mode, 'ACCUMULATING')
@@ -158,12 +160,14 @@ function [current_cal, calib_state_next, calib_info] = ...
         else
             calib_state_next.mode        = 'IDLE';
         end
+        calib_info.did_update = false;
     else
         % 准入成功: 推进累计样本
         calib_state_next.mode = 'ACCUMULATING';
         calib_state_next.buffer_L = [calib_state_next.buffer_L; current_raw(1)];
         calib_state_next.buffer_R = [calib_state_next.buffer_R; current_raw(2)];
         calib_state_next.valid_count = calib_state_next.valid_count + 1;
+        calib_info.did_update = true;
 
         % 检查是否满足最小采样样本量要求
         if calib_state_next.valid_count >= opts.N_min
@@ -193,6 +197,7 @@ function [current_cal, calib_state_next, calib_info] = ...
             else
                 % 有效样本保留率不足 (异常值过多): 拒绝标定并清空回退 IDLE
                 calib_info.reject_reason     = 'INSUFFICIENT_SAMPLES';
+                calib_info.did_update        = false;
                 calib_state_next.mode        = 'IDLE';
                 calib_state_next.buffer_L    = [];
                 calib_state_next.buffer_R    = [];
@@ -206,14 +211,6 @@ function [current_cal, calib_state_next, calib_info] = ...
     calib_info.bias_hat      = calib_state_next.bias_hat;
     calib_info.gain_scale    = calib_state_next.gain_scale;
     calib_info.mode          = calib_state_next.mode;
-
-    % 非有限值输入保护 (IDLE/ACCUMULATING 阶段)
-    raw_safe = current_raw;
-    if any(~isfinite(raw_safe))
-        raw_safe(~isfinite(raw_safe)) = calib_state_next.last_valid_raw(~isfinite(raw_safe));
-    else
-        calib_state_next.last_valid_raw = current_raw;
-    end
 
     % 若未完成校准，bias_hat 保持 [0; 0]，实现安全直通
     current_cal = (raw_safe - calib_state_next.bias_hat) ./ calib_state_next.gain_scale;

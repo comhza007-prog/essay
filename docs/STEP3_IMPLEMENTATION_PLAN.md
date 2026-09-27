@@ -1,4 +1,4 @@
-﻿# Step 3 实施方案：状态变量滤波 (SVF) 与机械参数在线辨识 (Phase 1 优先实施版)
+# Step 3 实施方案：状态变量滤波 (SVF) 与机械参数在线辨识 (Phase 1 优先实施版)
 
 ## 一、方案定位与参数溯源说明 (Scope & Provenance)
 
@@ -587,13 +587,15 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
          $$e_L = |\hat{i}_{\text{bias},L} - i_{\text{bias,true},L}|, \quad e_R = |\hat{i}_{\text{bias},R} - i_{\text{bias,true},R}|, \quad e_{\text{trial}} = \max(e_L, e_R)$$
        + 零偏真值范围 $[-30, +30]\text{ counts}$，高斯噪声 $\sigma_i = 10\text{ counts}$，100 次蒙特卡洛评估；
        + **主判据**：**$P_{95}(e_{\text{trial}}) \le 2.0\text{ counts}$**；同时导出并记录 $P_{95}(e_L)$, $P_{95}(e_R)$, $P_{95}(e_{\text{trial}})$, $\max(e_{\text{trial}})$。
-     * **六项子测试集 (A1 ~ A6) 与关键硬断言**：
-       + `A1`：100 次 MC 标称高斯噪声精度测试；
-       + `A2`：逐个破坏六项准入条件，确认 0 次更新（`assert(update_count_when_inadmissible == 0)`）；
-       + `A3`：累计中途注入运动扰动，确认窗口清零并退回 `IDLE`；
-       + `A4`：进入 `FROZEN` 后注入大运动电流，确认参数绝对锁定（`assert(max(abs(bias_after_motion - bias_before_motion)) < 1e-15)`）；
-       + `A5`：样本不足（$< N_{\min}$），确认严禁进入 `FROZEN`（`assert(~is_calibrated_when_insufficient)`）；
-       + `A6`：2% 脉冲异常点 ($\pm 100\text{ counts}$) 与 NaN/Inf 非有限输入保护，确认 Hampel 正确剔除，输出与状态始终有限（`assert(all(isfinite(current_cal)))`），且 $P_{95}(e_{\text{trial}}) \le 2.0\text{ counts}$ 仍成立。
+     * **六项子测试集 (A1 ~ A6) 实测指标与关键硬断言 (已全面 PASS 并闭环归档)**：
+       + `A1` (100 次 MC 标称高斯噪声精度测试)：$P_{95}(e_L) = 1.1027\text{ counts}$，$P_{95}(e_R) = 0.9706\text{ counts}$，**$P_{95}(e_{\text{trial}}) = 1.2817\text{ counts} \le 2.0\text{ counts}$**，$\max(e_{\text{trial}}) = 1.5193\text{ counts}$，平均有效保留样本 $498.5 / 500$ 步（保留率 $99.7\% \ge 90\%$），**PASS**；
+       + `A2` (12 组准入破坏 + 输入契约硬检验)：指令超标、速度/角速度/加速度非零、驱动使能、NaN/Inf 以及 `drive_torque_disabled` 非法值 (NaN, 2) 共 12 组故障工况下，累计更新次数严格为 0（`assert(update_count_when_inadmissible == 0)`）；同时检验 3 元素、1 元素及复数 `current_raw` 输入严格触发契约拒绝，**PASS**；
+       + `A3` (累计中途扰动中断复位)：前 200 步正常累计，第 201 步注入 $v_G = 0.05\text{ m/s}$ 运动扰动，缓冲区立即清空（`length=0`），有效计数清零（`valid_count=0`），模式即刻回退至 `IDLE`，且扰动消除后可从 0 正常重新累计，**PASS**；
+       + `A4` (FROZEN 锁定与抗强运动冲击)：完成 500 步标定进入 `FROZEN` 后，注入 1000 步 $8000\text{ counts}$ 大电流、全要素运动（$v_G = 0.5\text{ m/s}, a_G = 2.0\text{ m/s}^2$）与驱动使能工况；每步断言 `~info.is_admissible`、`info.reject_reason == 'DRIVE_ENABLED'`、`info.is_calibrated == true` 及 `~info.did_update`，冻结参数前后最大漂移为 **$0.00\text{e}+00\text{ counts} < 10^{-15}\text{ counts}$**，输出精确扣减冻结零偏，**PASS**；
+       + `A5` (样本不足保护)：输入 300 步有效样本（$< N_{\min} = 500$），模式保持 `ACCUMULATING`，标定标志严格保持 `is_calibrated == false`，未完成标定前输出安全直通原量测，**PASS**；
+       + `A6` (2% 脉冲异常点稳健性与 NaN/Inf 保护，MC 100)：每试验在 500 步中注入 10 个 $\pm 100\text{ counts}$ ($10\sigma$) 强离群脉冲，Hampel 稳健过滤平均有效保留 $489.0/500$ 样本（保留率 $97.8\% \ge 90\%$），**$P_{95}(e_{\text{trial}}) = 1.3192\text{ counts} \le 2.0\text{ counts}$**，$\max(e_{\text{trial}}) = 1.8611\text{ counts}$；非有限输入下输出始终保持有限（`assert(all(isfinite(current_cal)))`），**PASS**；
+       + `数据治理与回读校验`：明细数据完整导出至 `step3c_c4a_bias_results.csv`（200 行 $\times$ 15 列），全部 15 列（含 `Trial_ID, Subtest, RNG_Seed, True_Bias_L/R, Est_Bias_L/R, Err_L/R, Err_Trial_Max, Is_Calibrated, Calib_Mode, N_Eff_L/R, Within_P95_Threshold`）执行 100% 逐列逐元素严格内存回读校验（数值残差 $< 10^{-9}$），断言全数通过。
+     * **验收门状态**：**Gate C4-A 静态电流零偏标定单元测试正式通过并关闭归档**。
 
    - **验收门 2: Test C4-B（时延识别与因果对齐单元测试）**：
      * **定位**：固定已知增益与零偏，独立评估通信时延估计器与因果对齐缓冲区；
