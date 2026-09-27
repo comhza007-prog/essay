@@ -8,7 +8,7 @@
 %    - 精确校正已知传感器增益漂移与霍尔零偏，完全保留随机白噪声、时滞与位置量化:
 %      iL_corr = (iL_meas - cfg.i_bias_L) / (1 + cfg.delta_g_L);
 %      iR_corr = (iR_meas - cfg.i_bias_R) / (1 + cfg.delta_g_R);
-%    - 严格采用 C8A 相同的五项正式验收指标门槛，未达标定性为 ORACLE_FAIL_TIME_RATIO
+%    - 严格采用 C8A 相同的五项正式验收指标门槛，未达标定性为 FAIL_TIME_RATIO 等具体失败梯次
 %    - 导出独立性能表 step3c_part3_oracle_results.csv (68 列)
 %    - 导出 4 种最差差模确定性工况表 step3c_part3_oracle_deterministic_results.csv (9 列)
 % 2. [Part 2] Test D0b: 六分支严格配对消融分析 (D0b Matched Paired Ablation, N = 100)
@@ -784,7 +784,13 @@ function verify_step3c_part3()
     T_trials_read = readtable(file_trials);
     assert(height(T_trials_read) == N_mc * numel(d1_branches), '逐试验明细表行数必须为 500');
     assert(width(T_trials_read) == 10, '逐试验明细表列数必须为 10');
-    fprintf('    [OK] D1 逐试验明细表导出与回读断言 100%% 成立!\n');
+    assert(max(abs(T_trials_read.theta_exceed_ratio - T_trials.theta_exceed_ratio)) < 1e-12, ...
+        '逐试验明细表超标时间回读数值不一致');
+    assert(max(abs(T_trials_read.abs_theta_final - T_trials.abs_theta_final)) < 1e-12, ...
+        '逐试验明细表终点参数回读数值不一致');
+    assert(all(strcmp(T_trials_read.Branch_ID, T_trials.Branch_ID)), ...
+        '逐试验明细表分支ID回读不一致');
+    fprintf('    [OK] D1 逐试验明细表导出与数值回读断言 100%% 成立!\n');
 
     % 导出时间序列瞬态分布表
     t_vec = d_sym.t;

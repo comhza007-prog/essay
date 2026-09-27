@@ -198,7 +198,7 @@
     - RMS(delta_phi) : 2.5523e+00 count*m
     [说明] 在对称真值 Delta_Kf*=0 下，y_f 等于零参数假设下的表观回归残差。
 >>> 正在导出 D1 逐试验明细表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part3_d1_trial_results.csv
-    [OK] D1 逐试验明细表导出与回读断言 100% 成立!
+    [OK] D1 逐试验明细表导出与数值回读断言 100% 成立!
 >>> 正在导出 D1 时间序列瞬态分布表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_part3_d1_timeseries.csv
     [OK] D1 时间序列瞬态分布表导出与回读断言 100% 成立!
 
