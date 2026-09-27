@@ -25,6 +25,9 @@ function [signals_aligned, align_state_next, delay_info] = ...
     if ~isfield(opts, 'd_pos_known'), opts.d_pos_known = NaN; end
     if ~isfield(opts, 'require_position_alignment'), opts.require_position_alignment = true; end
     if ~isfield(opts, 'strict_sequence'), opts.strict_sequence = true; end
+    if ~isfield(opts, 'timestamp_alignment_tolerance')
+        opts.timestamp_alignment_tolerance = 0.5 * opts.dt;
+    end
 
     required_depth = opts.xcorr_window_length + opts.max_search_delay + opts.max_position_delay + 1;
     if ~isfield(opts, 'buffer_depth')
@@ -494,12 +497,39 @@ function [signals_aligned, align_state_next, delay_info] = ...
                     t_pL = align_state_next.t_source_buffer_pos_L(idx_posL);
                     t_pR = align_state_next.t_source_buffer_pos_R(idx_posR);
 
-                    if all(isfinite([t_iL, t_iR, t_pL, t_pR]))
-                        signals_aligned.common_timestamp      = min([t_iL, t_iR, t_pL, t_pR]);
-                        signals_aligned.used_source_timestamp = [t_iL; t_iR; t_pL; t_pR];
+                    used_timestamps = [t_iL; t_iR; t_pL; t_pR];
+                    effective_timestamps = [ ...
+                        t_iL - d_tot_L * opts.dt; ...
+                        t_iR - d_tot_R * opts.dt; ...
+                        t_pL - d_pos_L * opts.dt; ...
+                        t_pR - d_pos_R * opts.dt];
+
+                    if all(isfinite([used_timestamps; effective_timestamps]))
+                        timestamp_spread = max(effective_timestamps) - min(effective_timestamps);
+                        if timestamp_spread > opts.timestamp_alignment_tolerance
+                            signals_aligned.current_pair_valid       = false;
+                            signals_aligned.absolute_alignment_valid = false;
+                            signals_aligned.valid_for_regression     = false;
+                            signals_aligned.current_cal              = [NaN; NaN];
+                            signals_aligned.position                 = [NaN; NaN];
+                            signals_aligned.common_timestamp         = NaN;
+                            signals_aligned.used_source_timestamp    = used_timestamps;
+                            delay_info.reject_reason                  = 'TIMESTAMP_ALIGNMENT_MISMATCH';
+                            return;
+                        end
+
+                        signals_aligned.common_timestamp      = min(effective_timestamps);
+                        signals_aligned.used_source_timestamp = used_timestamps;
                     else
-                        signals_aligned.common_timestamp      = NaN;
-                        signals_aligned.used_source_timestamp = [t_iL; t_iR; t_pL; t_pR];
+                        signals_aligned.current_pair_valid       = false;
+                        signals_aligned.absolute_alignment_valid = false;
+                        signals_aligned.valid_for_regression     = false;
+                        signals_aligned.current_cal              = [NaN; NaN];
+                        signals_aligned.position                 = [NaN; NaN];
+                        signals_aligned.common_timestamp         = NaN;
+                        signals_aligned.used_source_timestamp    = used_timestamps;
+                        delay_info.reject_reason                  = 'PACKET_CORRUPT';
+                        return;
                     end
                     signals_aligned.current_cal               = [iL_align; iR_align];
                     signals_aligned.position                  = [yL_align; yR_align];

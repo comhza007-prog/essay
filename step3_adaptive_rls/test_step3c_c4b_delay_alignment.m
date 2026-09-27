@@ -36,6 +36,7 @@ function test_step3c_c4b_delay_alignment()
     opts_base.xcorr_window_length   = 150;
     opts_base.max_search_delay      = 10;
     opts_base.max_position_delay    = 10;
+    opts_base.timestamp_alignment_tolerance = 0.5 * dt;
     opts_base.d_pos_known           = NaN;
     opts_base.require_position_alignment = true;
     opts_base.strict_sequence       = true;
@@ -426,6 +427,7 @@ function test_step3c_c4b_delay_alignment()
 
     assert(acc_rate_b2 >= 95.0, sprintf('B2 Scenario B 失败: 互相关时延识别正确率 %.1f%% < 95.0%%', acc_rate_b2));
     assert(mean_rms_b2 <= 30.0, sprintf('B2 Scenario B 失败: RMS 误差均值 %.2f counts > 30.0 counts', mean_rms_b2));
+    assert(p95_rms_b2 <= 30.0, sprintf('B2 Scenario B 失败: P95 RMS 误差 %.2f counts > 30.0 counts', p95_rms_b2));
     fprintf('      - Scenario B PASS\n');
 
     % ---------------------------------------------------------------------
@@ -434,7 +436,14 @@ function test_step3c_c4b_delay_alignment()
     fprintf('    >>> [Scenario C] 丢包与时间戳不连续性因果一致性测试...\n');
     align_state_c = [];
     max_causality_gap = 0;
+    drop_steps = [45, 46, 90, 135];
+    recovered_after_drop = false;
     for k = 1:180
+        if ismember(k, drop_steps)
+            % 真实丢包：该采样帧完全不调用对齐器，下一帧序列号直接跳变。
+            % 丢包当拍的下游冻结由 B6 的 packet_valid/current_valid 故障用例覆盖。
+            continue;
+        end
         t_src_base = (k - 1) * dt;
         % 模拟非均匀抖动源时间戳，但在物理因果范围内
         ts_c.t_source_L   = t_src_base + 0.0001 * sin(k);
@@ -459,9 +468,17 @@ function test_step3c_c4b_delay_alignment()
 
         if sig_c.valid_for_regression
             % 断言 common_timestamp 严格为所选历史源时间戳的最小值
-            expected_common = min(sig_c.used_source_timestamp);
+            effective_timestamps = [ ...
+                sig_c.used_source_timestamp(1) - (d_path_true(1) + d_meas_L_a) * dt; ...
+                sig_c.used_source_timestamp(2) - (d_path_true(2) + d_meas_R_a) * dt; ...
+                sig_c.used_source_timestamp(3) - opts_b2.d_pos_known * dt; ...
+                sig_c.used_source_timestamp(4) - opts_b2.d_pos_known * dt];
+            expected_common = min(effective_timestamps);
             assert(abs(sig_c.common_timestamp - expected_common) < 1e-12, ...
-                'Scenario C: common_timestamp 必须严格等于 min(used_source_timestamp)');
+                'Scenario C: common_timestamp 必须严格等于有效物理时刻最小值');
+            assert(max(effective_timestamps) - min(effective_timestamps) <= ...
+                opts_b2.timestamp_alignment_tolerance + 1e-12, ...
+                'Scenario C: 有效物理时刻差异超过对齐容限');
             % 断言严格因果性: common_timestamp 绝不超过墙上时间
             t_wall_c = max([ts_c.t_recv_L, ts_c.t_recv_R, ts_c.t_recv_pos]);
             assert(sig_c.common_timestamp <= t_wall_c + 1e-12, ...
@@ -470,8 +487,10 @@ function test_step3c_c4b_delay_alignment()
             if gap > max_causality_gap
                 max_causality_gap = gap;
             end
+            recovered_after_drop = true;
         end
     end
+    assert(recovered_after_drop, 'Scenario C: 丢包后未恢复到有效回归状态');
     fprintf('      - Scenario C PASS: common_timestamp 严格从历史缓冲区读取且严格因果 (最大通道离散差: %.2e s)\n', max_causality_gap);
     records(end+1) = make_record('B2_SCENARIO_C_DISCONTINUITY', 1, NaN, NaN, info_c, align_state_c, sig_c);
 

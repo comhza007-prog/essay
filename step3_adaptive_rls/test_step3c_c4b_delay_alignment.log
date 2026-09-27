@@ -30,7 +30,7 @@
         * 100 次 MC 对齐电流 RMS 误差 P95:  10.58 counts
       - Scenario B PASS
     >>> [Scenario C] 丢包与时间戳不连续性因果一致性测试...
-      - Scenario C PASS: common_timestamp 严格从历史缓冲区读取且严格因果 (最大通道离散差: 4.10e-03 s)
+      - Scenario C PASS: common_timestamp 严格从历史缓冲区读取且严格因果 (最大通道离散差: 5.19e-03 s)
     >>> [Scenario D] 未知位置延迟测试 (d_pos_known = NaN 刚性切断回归)...
       - Scenario D PASS: 无已知位置延迟模型时刚性切断回归准入 (POSITION_DELAY_UNKNOWN)
     [OK] Subtest B2 验收通过: 四场景分流 (A~D) 全面合规通过!
