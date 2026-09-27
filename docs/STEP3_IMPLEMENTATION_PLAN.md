@@ -737,11 +737,50 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
        + `C4-B-HW`：**`NOT_STARTED`**（实物硬件时钟域同步、真实网络抖动与台架标定暂未启动）；
        + `Step 3`：**`OPEN`**（严格保持开放）。
 
-   - **验收门 3: Test C4-C（增益校正与可辨识性界定）**：
-     * **定位与可辨识性红线**：承认纯回采量测（电流+位置）数学上不可解耦传感器增益误差 $\delta_g$ 与推力系数不对称 $\Delta K_f$。“对称运行段相对增益校准”只能作为假设性通道均衡，不可宣称为绝对增益标定；
-     * **工程优先级**：驱动出厂标定参数/源时间戳 > 精密分流电阻/基准校准源 > 外置电流表离线实测 > 对称运行相对均衡（显式标记为假设性支线）；
-     * **设计门槛**：允许差模残差 $|\delta_g^L - \delta_g^R| \le 0.10\%$（满足表观推力偏差 $\le 1\times 10^{-5}\text{ N/ct}$ 且保留裕量）；
-     * **保护性测试**：对称系统校准后虚假 $\Delta K_f \le 1\times 10^{-5}\text{ N/ct}$；$r=0.70$ 与 $r=1.30$ 真实不对称符号保持且相对辨识误差 $\le 5\%$，绝不允许将物理真实不对称抹除。
+   - **验收门 3: Test C4-C（增益校正与可辨识性界定，C4-C-SIM 纯仿真）**：
+     * **定位与数学可辨识性红线**：
+       + 刚架推力模型 $F_i = K_{f,i} i_{\text{true},i}$，量测电流含传感器增益误差 $i_{\text{meas},i} = g_i i_{\text{true},i}$；
+       + 表观推力系数 $F_i = (K_{f,i} / g_i) i_{\text{meas},i} = K_{f,i}^{\text{apparent}} i_{\text{meas},i}$；
+       + **可辨识性定理**：纯回采量测（电流+位置/加速度）数学上**不可解耦**传感器硬件增益误差 $\delta_g = g_L / g_R$ 与推力系数真实不对称 $r = K_{f,L} / K_{f,R}$，二者处于完全代数混淆流形上；
+       + **工程优先级界定**：驱动出厂标定参数/源时间戳 > 精密分流电阻/基准校准源 > 外置电流表离线实测 > 对称运行相对均衡（显式标记为假设性支线）；
+       + **校正分层防伪装红线**：“对称运行段相对增益校准”只能作为假设性通道均衡，**严禁宣称为绝对硬件标定**；禁止将三类不同置信源的结果合并宣称“增益校正通过”。
+     * **三大独立校正模式契约**：
+       1. `ORACLE_GAIN`：仿真已知真实传感器增益真值 $g_L, g_R$，专门用于验证增益补偿算法本身的数学正确性；
+       2. `EXTERNAL_REFERENCE`：模拟工程中接入外置标准电流表、精密分流电阻或离线基准电流源，基于真实物理参考执行工程标定；
+       3. `RELATIVE_BALANCE_ASSUMED`：仅在声明对称运行假设前提下执行相对通道均衡分析；输出状态必须标记为 `UNIDENTIFIABLE` 或 `ASSUMPTION_ONLY`，不得宣称辨识了真实 $\Delta K_f$，且**严禁进入 C8A-eng 主闭环**。
+     * **算法模块函数接口与状态机诊断规范**：
+       + 函数签名：
+         ```matlab
+         [current_corrected, calib_state_next, calib_info] = ...
+             step3c_gain_calibrator(current_in, current_ref, motion, calib_state, opts)
+         ```
+       + 完备诊断输出结构体 `calib_info`：
+         - `calib_info.mode`：`'ORACLE_GAIN' | 'EXTERNAL_REFERENCE' | 'RELATIVE_BALANCE_ASSUMED'`；
+         - `calib_info.identifiability_status`：六项严密状态分类：
+           `'CALIBRATED_EXTERNAL_REFERENCE' | 'CALIBRATED_ORACLE_SIM' | 'ASSUMPTION_ONLY' | 'UNIDENTIFIABLE' | 'OUT_OF_CALIBRATION_RANGE' | 'INVALID_INPUT'`；
+         - `calib_info.gain_source`：`'EXTERNAL_HARDWARE_SOURCE' | 'ORACLE_SIM_PARAM' | 'SYMMETRIC_MOTION_ASSUMPTION' | 'NONE'`；
+         - `calib_info.did_update`：`logical`（本步是否触发了参数更新）；
+         - `calib_info.is_frozen`：`logical`（参数是否处于冻结保持状态）；
+         - `calib_info.reject_reason`：`'NONE' | 'SATURATION' | 'LOW_EXCITATION' | 'NONFINITE_INPUT' | 'UNCONFIRMED_DELAY' | 'OUT_OF_RANGE'`；
+         - `calib_info.gain_residual`：`[2x1]` 增益校正相对残差；
+         - `calib_info.apparent_delta_kf`：估计的表观推力系数差模。
+       + **异常保护与零伪装冻结规范**：
+         在电流饱和（$|i| \ge 0.95 I_{\max}$）、低动态激励（$\operatorname{Var}(\dot{i}) < \text{th}$）、输入含 NaN/Inf、或因果对齐时延未确认时，必须刚性置位：
+         `calib_info.did_update = false`，`calib_info.is_frozen = true`；
+         输出电流安全直通原量测，严禁使用截零、默认增益或上一时刻估计值伪装成成功校正。
+     * **四项基准子测试集 (C1 ~ C4) 与分区验收准则**：
+       + `C1`（对称系统虚假参数防护测试）：设定真值 $r=1.00$，左右增益一致；在 `ORACLE_GAIN` 或 `EXTERNAL_REFERENCE` 模式下作为 PASS 判据，断言校正后虚假表观推力偏差 $|\Delta K_f| \le 1.0\times 10^{-5}\text{ N/ct}$；
+       + `C2`（真实不对称符号保持与物理界定测试）：设定真实物理不对称 $r=0.70$ 与 $r=1.30$；在 `ORACLE_GAIN` 或 `EXTERNAL_REFERENCE` 模式下作为 PASS 判据，断言不对称符号严格保持且相对辨识误差 $\le 5\%$（绝不允许抹除物理真实不对称）；在 `RELATIVE_BALANCE_ASSUMED` 模式下断言状态为 `UNIDENTIFIABLE` 或 `ASSUMPTION_ONLY`，并断言其禁止接入回归；
+       + `C3`（增益差模敏感度与严格三阶分区判定测试）：注入增益差模 $|\delta_g^L - \delta_g^R| \in \{0.05\%, 0.10\%, 0.50\%\}$：
+         * $0.05\%$ 区间：属于设计校正范围，断言必须满足虚假 $\Delta K_f \le 1.0\times 10^{-5}\text{ N/ct}$ 门限（**PASS**）；
+         * $0.10\%$ 区间：临界边界点，独立测试并显式报告实际数值指标，严禁模糊或泛化判定；
+         * $0.50\%$ 区间：超出传感器出厂精度标称范围，断言状态机必须报告 `OUT_OF_CALIBRATION_RANGE`，**不得要求 PASS**，刚性拦截超标输入；
+       + `C4`（异常保护、低激励拦截与输入契约测试）：饱和、动态激励不足、NaN/Inf 输入下断言 `did_update == false`、`is_frozen == true` 与安全直通，验证系统抗污染刚性。
+     * **验收门状态**：
+       + `C4-C-SIM`：**`PENDING / 规划已修订`**（待编码实现 `step3c_gain_calibrator.m` 与 `test_step3c_c4c_gain_calibration.m` 后执行纯仿真验证）；
+       + `C4-B-SIM`：**`PASS / CLOSED`**（仅限纯仿真范围关闭归档，绝不表述为硬件时延同步或物理台架实验）；
+       + `C4-B-HW`：**`NOT_STARTED`**；
+       + `Step 3`：**`OPEN`**（在 C8A-eng 与 C8C-eng 完成前严格保持开放）。
 
 4. **工程前端集成与 C8 复测规范 (C8A-eng & C8C-eng)**：
    - **双轨命名规范**：
