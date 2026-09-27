@@ -560,12 +560,53 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
        + `calib_state = struct('mode', 'IDLE', 'buffer_L', [], 'buffer_R', [], 'valid_count', 0, 'bias_hat', [0; 0], 'gain_scale', [1; 1], 'is_calibrated', false)`（校准器内部跨步递推状态）；
        + `opts`（配置参数结构体：`calibration_duration`, `N_min`, `min_retained_ratio`, `th_cmd`, `th_v`, `th_omega`, `th_a` 等）；
        + **C4-A 阶段红线**：固定 `gain_scale = [1; 1]`，严禁在零偏测试中暗含任何增益校正。
-   - **因果时延对齐模块接口**：
+   - **因果时延对齐模块接口（显式状态递推架构）**：
      ```matlab
-     [signals_aligned, delay_info] = step3c_causal_delay_aligner(current_cal, position, timestamp, opts);
+     [signals_aligned, align_state_next, delay_info] = ...
+         step3c_causal_delay_aligner( ...
+             current_cal, current_cmd, position, timestamp, ...
+             align_state, opts);
      ```
-     * 输入：`current_cal` (已校准电流)，`position` (光栅尺位置量测)，`timestamp` (总线接收/源时间戳结构体)，`opts` (对齐配置与历史缓冲区深度)；
-     * 输出：`signals_aligned` (同基准因果对齐后的电流与位置数组)，`delay_info` (识别的时延步数 $\hat{d}_L, \hat{d}_R, \Delta \hat{d}$ 及互相关置信度指标)。
+     * 数据契约与结构体定义：
+       + `current_cal = [iL_cal; iR_cal]`（校准后双通道电流回采列向量，counts）；
+       + `current_cmd = [iL_cmd; iR_cmd]`（控制器指令列向量，counts，用于互相关基准参考）；
+       + `position = [yL_meas; yR_meas]`（光栅尺左右位置量测列向量，m）；
+       + `timestamp`（结构体，包含源发送与总线接收时间戳：`.t_source_L`, `.t_source_R`, `.t_source_pos`, `.t_recv_L`, `.t_recv_R`, `.t_recv_pos`, `.seq_L`, `.seq_R`）；
+       + `align_state`（校准器内部跨步递推状态机）：
+         ```matlab
+         align_state.mode                % 'TIMESTAMP' | 'XCORR_KNOWN_ACT' | 'DIFF_ONLY'
+         align_state.current_buffer_L    % 电流历史滑动缓冲区 L
+         align_state.current_buffer_R    % 电流历史滑动缓冲区 R
+         align_state.command_buffer_L    % 指令历史滑动缓冲区 L
+         align_state.command_buffer_R    % 指令历史滑动缓冲区 R
+         align_state.position_buffer_L   % 位置历史滑动缓冲区 L
+         align_state.position_buffer_R   % 位置历史滑动缓冲区 R
+         align_state.timestamp_buffer    % 时间戳历史缓冲区
+         align_state.d_hat_L             % 当前通道时延估计 L
+         align_state.d_hat_R             % 当前通道时延估计 R
+         align_state.last_trusted_delay  % 上一拍可信时延状态
+         align_state.confirm_count       % 迟滞确认计数器
+         align_state.is_initialized      % 预热完成初始化标志
+         ```
+       + `signals_aligned`（输出对齐信号结构体）：
+         ```matlab
+         signals_aligned.valid             % logical: 缓冲区预热完成且输出有效时为 true，预热期为 false
+         signals_aligned.common_timestamp  % scalar: 因果对齐后的公共物理基准时间戳 (s)
+         signals_aligned.current_cal       % [2x1]: 同基准因果对齐后的左右电流 [iL_align; iR_align]
+         signals_aligned.position          % [2x1]: 同基准因果对齐后的左右位置 [yL_align; yR_align]
+         ```
+         **因果性与预热红线**：缓冲区未充满或输入异常时，`valid` 必须为 `false`；**严禁通过补零或冒充有效数据输入下游 SVF/RLS**。
+       + `delay_info`（时延诊断信息结构体）：
+         ```matlab
+         delay_info.did_update    % logical: 本采样步是否触发了时延参数更新
+         delay_info.method        % 'TIMESTAMP' | 'XCORR_KNOWN_ACT' | 'DIFF_ONLY'
+         delay_info.confidence    % scalar: 互相关置信度指标 [0, 1]
+         delay_info.reject_reason % 'NONE' | 'LOW_EXCITATION' | 'SATURATION' | ...
+                                  % 'PEAK_INSIGNIFICANT' | 'NEGATIVE_DELAY' | 'BUFFER_WARMING' | 'PACKET_CORRUPT'
+         delay_info.d_total_hat   % [2x1]: 命令到回采的总延迟估计 (samples)
+         delay_info.d_meas_hat    % [2x1]: 纯量测通信延迟估计 (samples, DIFF_ONLY 模式下为 [NaN; NaN])
+         delay_info.delta_d_hat   % scalar: 左右通道差模延迟估计 (samples)
+         ```
 
 3. **Step 3C-4 三个独立验收门 (Staged Acceptance Gates)**：
 
@@ -597,13 +638,38 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
        + `数据治理与回读校验`：明细数据完整导出至 `step3c_c4a_bias_results.csv`（200 行 $\times$ 15 列），全部 15 列（含 `Trial_ID, Subtest, RNG_Seed, True_Bias_L/R, Est_Bias_L/R, Err_L/R, Err_Trial_Max, Is_Calibrated, Calib_Mode, N_Eff_L/R, Within_P95_Threshold`）执行 100% 逐列逐元素严格内存回读校验（数值残差 $< 10^{-9}$），断言全数通过。
      * **验收门状态**：**Gate C4-A 静态电流零偏标定单元测试正式通过并关闭归档**。
 
-   - **验收门 2: Test C4-B（时延识别与因果对齐单元测试）**：
-     * **定位**：固定已知增益与零偏，独立评估通信时延估计器与因果对齐缓冲区；
-     * **时延确定优先级**：
-       1. 首选方案：报文源时间戳 + 接收时间戳 + 总线序列号硬对齐；
-       2. 备选方案（无硬件时间戳）：各通道独立相对自身命令参考估计绝对时延 $d_L = \arg\max R(i_{\text{cmd},L}, i_{\text{meas},L})$ 与 $d_R = \arg\max R(i_{\text{cmd},R}, i_{\text{meas},R})$，严禁仅使用左右互相关确定时延；明确区分执行器滞后 $d_{\text{act}}$ 与通信量测滞后 $d_{\text{meas}}$；
-       3. 互相关更新准入：仅在高电流变化率、无饱和、窗口方差超标且第一峰与第二峰峰值差超越显著性门限时更新；平稳段保持先前可信估计；
-     * **验收指标**：测试 $0, 1, 2\text{ samples}$ 时滞工况，高激励区间时延识别正确率 $\ge 95\%$；因果缓冲区对齐后残余差模时延为 0。
+   - **验收门 2: Test C4-B（时延识别与因果历史对齐单元测试）**：
+     * **定位与物理延迟解耦原理**：
+       + 独立评估因果历史对齐缓冲区与时延估计器，输入已校准电流 $i_{\text{cal}}$、指令参考 $i_{\text{cmd}}$ 与位置 $y$；
+       + **可辨识性物理红线**：命令与回采互相关估计得到的是回路总延迟：
+         $$d_{\text{total}} = d_{\text{act}} + d_{\text{meas}} + d_{\text{driver}}$$
+         它**绝不是纯量测通信延迟 $d_{\text{meas}}$**！若直接将 $d_{\text{total}}$ 用于延迟位置通道，会将执行器机械/电气响应延迟 $d_{\text{act}}$ 重复叠加，造成新的虚假回归时间错配。
+     * **三种工作模式与降级规则**：
+       1. `TIMESTAMP`（源采样时间戳硬对齐，工程主路径）：报文源时间戳完备，直接按物理源时间对齐各通道；接收时间戳仅用于统计网络传输抖动；
+       2. `XCORR_KNOWN_ACT`（已知执行器延迟互相关模式）：无硬件时间戳，但执行器响应延迟 $d_{\text{act}}$ 已通过离线台架独立标定已知：
+          $$d_{\text{meas,hat}} = d_{\text{total,hat}} - d_{\text{act,known}}$$
+          若计算出现负值（$d_{\text{total,hat}} < d_{\text{act,known}}$），判定为非法估计（`reject_reason = 'NEGATIVE_DELAY'`），**严格禁止截断为 0 冒充有效估计**，维持上一拍可信值；
+       3. `DIFF_ONLY`（未知执行器延迟差模对齐模式）：无硬件时间戳且 $d_{\text{act}}$ 未知，在左右执行器电气延迟对称（$d_{\text{act},L} \approx d_{\text{act},R}$）假设下估计相对差模：
+          $$\Delta d_{\text{meas}} \approx \Delta d_{\text{total}} = d_{\text{total},L} - d_{\text{total},R}$$
+          **降级红线约束**：本模式仅允许左右电流通道相互补齐差模，**严禁宣称完成了电流—位置绝对时间对齐**，`d_meas_hat` 强制输出 `[NaN; NaN]`。
+     * **时延更新准入与迟滞确认机制**：
+       + 仅在高电流变化率（$\operatorname{Var}(\dot{i}_{\text{cmd}}) \ge \sigma_{\text{di,th}}^2$）、无电流饱和（$|i_{\text{cmd}}| \le 0.95 I_{\max}$）、滑动相关第一峰与第二峰比值超越显著性门限（$\rho_1 - \rho_2 \ge \Delta \rho_{\text{th}}$）时方可触发更新；
+       + 平稳段与失激励段严格保持 `did_update = false`，维持 `last_trusted_delay`；
+       + 迟滞确认机制：连续 $N_{\text{confirm}} \ge 5$ 步检测到相同时延突变方可切换，杜绝单步噪声尖峰引起的缓冲区跳变。
+     * **六项基准子测试集 (B1 ~ B6)**：
+       + `B1` (时间戳硬对齐测试)：$d_{\text{meas}} \in \{0, 1, 2\}\text{ samples}$，时间戳模式识别与因果对齐 100% 正确；
+       + `B2` (已知 $d_{\text{act}}$ 互相关测试)：Monte Carlo 评估 $d_{\text{meas}}$ 识别正确率 $\ge 95\%$；
+       + `B3` (未知 $d_{\text{act}}$ 差模降级测试)：强制进入 `DIFF_ONLY`，验证严禁输出虚假绝对 $d_{\text{meas,hat}}$（输出为 NaN）；
+       + `B4` (稳健门控与迟滞测试)：低激励、饱和、多峰模糊工况下 `did_update = false`，保持上一可信值；
+       + `B5` (严格因果性硬检查)：对齐输出索引只能引用当前或历史缓冲区样本，未来样本引用次数严格为 0；
+       + `B6` (预热与异常输入防护)：预热期严格输出 `signals_aligned.valid = false`；NaN/Inf、丢包乱序下保持有限与受控，无效数据绝不进入下游 SVF/RLS。
+     * **验收指标量化判据**：
+       + 时间戳模式对齐误差：严格 $0\text{ samples}$；
+       + 互相关模式正确识别率：$\ge 95.0\%$；
+       + 对齐后残余差模时延：严格 $0\text{ samples}$；
+       + 未来样本引用次数：严格 $\equiv 0$；
+       + 低置信度误更新次数：严格 $\equiv 0$；
+       + 非有限输出项：严格 $\equiv 0$。
 
    - **验收门 3: Test C4-C（增益校正与可辨识性界定）**：
      * **定位与可辨识性红线**：承认纯回采量测（电流+位置）数学上不可解耦传感器增益误差 $\delta_g$ 与推力系数不对称 $\Delta K_f$。“对称运行段相对增益校准”只能作为假设性通道均衡，不可宣称为绝对增益标定；

@@ -562,7 +562,7 @@ function test_step3c_c4a_bias_calibration()
     fprintf('   Gate C4-A 单元测试验收结论: 全部 PASS\n');
     fprintf('=========================================================================\n');
     fprintf('   Subtest A1 (MC 100 标称):  P95(e_trial) = %.4f counts <= 2.0 counts [PASS]\n', p95_a1_trial);
-    fprintf('   Subtest A2 (准入破坏 10 例): 非法准入累计更新次数 = 0             [PASS]\n');
+    fprintf('   Subtest A2 (准入破坏 12 例): 非法准入累计更新次数 = 0             [PASS]\n');
     fprintf('   Subtest A3 (中途扰动):     有效计数清零，状态复位回退 IDLE       [PASS]\n');
     fprintf('   Subtest A4 (FROZEN锁定):   强运动工况参数漂移 < 1e-15 counts    [PASS]\n');
     fprintf('   Subtest A5 (样本不足):     有效计数 300 < 500 禁止进入 FROZEN    [PASS]\n');
