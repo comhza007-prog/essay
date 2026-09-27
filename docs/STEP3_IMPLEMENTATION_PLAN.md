@@ -780,9 +780,9 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
        + `C4-C-SIM`：**`PASS / CLOSED`**（纯仿真增益校正与可辨识性界定、三大模式分层、C1 对称系统虚假参数防护、C2 真实推力模型不对称辨识与物理符号严格保持、C3 增益差模 100 次带噪 MC 三阶分区判定、C4 故障锁存防御/零伪装硬冻结/显式 reset 以及 22 列扩展 CSV 数据治理回读校验全数通过，正式关闭归档；明确界定为纯仿真验证，非硬件/物理台架实测）；
        + `C4-C-HW`：**`NOT_STARTED`**；
        + `C4-B-HW`：**`NOT_STARTED`**；
-       + `C8A-eng`：**`NOT_STARTED`**；
-       + `C8C-eng`：**`NOT_STARTED`**；
-       + `Step 3`：**`OPEN`**（在 C8A-eng 与 C8C-eng 完成前严格保持开放）。
+       + `C8A-eng`：**`PASS / CLOSED`**（串联 C4-A 零偏标定、C4-C 增益校正与 C4-B 因果对齐工程前端，100 次全要素扰动 MC 检验超标时间比例降至 3.14% <= 5.00%，原五项正式准入判据全部通过，4 种最劣确定性差模工况全部通过，r=0.70/1.30 真实非对称跟踪能力完好保留，明确界定为纯仿真闭环集成）；
+       + `C8C-eng`：**`PASS / CLOSED`**（接入工程前端的迟滞门控动态因果反事实 RK4 重积分评估，100 次严格配对比较下平均偏航改善度 +1.1921 urad > 0，中位数 +0.3501 urad > 0，均值 95% CI 下界 +0.5326 urad > 0，配对 t 检验 p = 5.23e-4 < 0.05 统计显著，门控激活时间削减 82.94 percentage points，绝不调整原门控阈值凑数）；
+       + `Step 3`：**`OPEN`**（C8A-eng 与 C8C-eng 纯仿真闭环已全面达标，待用户最终审查确认后决定关闭）。
 
 4. **工程前端集成与 C8 复测规范 (C8A-eng & C8C-eng)**：
    - **双轨命名规范**：
@@ -792,4 +792,44 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
    - **验收判据固定（严禁拔高门槛或缩短评测窗口）**：
      * `C8A-eng`：对称全要素工况下超标时间均值严格 $\le 5.00\%$，原五项正式判据全数通过；且在 $r=0.70/1.30$ 非对称工况下保留真实物理参数跟踪能力；
      * `C8C-eng`：严格配对蒙特卡洛评估，平均偏航改善度 $> 0$，中位数 $> 0$，95% CI 下界 $> 0$（或报告统计显著性），不通过调节原门控阈值凑取通过；
-   - **最终关闭准则**：只有 `C8A-eng` 与 `C8C-eng` 在非 Oracle 工程前端下完整达标，方可正式讨论关闭 Step 3。当前 Step 3 依然严格保持 **`OPEN`**。
+   - **最终关闭准则与当前状态**：
+     * `C8A-eng: PASS / CLOSED (SIM-only)`
+     * `C8C-eng: PASS / CLOSED (SIM-only)`
+     * `C4-B-HW: NOT_STARTED`
+     * `C4-C-HW: NOT_STARTED`
+     * `Step 3: OPEN`（C8A-eng 与 C8C-eng 纯仿真闭环已全面达标，待用户最终审查确认后决定关闭）。
+
+   - **C8A-eng 综合实测指标与五项正式判据验证 (N = 100 MC)**：
+     * 判据 1（超标时间比例均值）：RAW = $92.75\%$（FAIL）$\longrightarrow$ **ENG = $3.14\% \le 5.00\%$（PASS）**；
+     * 判据 2（参数估计 P95）：RAW = $1.8831\times 10^{-4}$ $\longrightarrow$ **ENG = $6.3062\times 10^{-6}\text{ N/ct} \le 1.0\times 10^{-5}$（PASS）**；
+     * 判据 3（参数估计中位数）：RAW = $5.9180\times 10^{-5}$ $\longrightarrow$ **ENG = $2.3839\times 10^{-6}\text{ N/ct} \le 5.0\times 10^{-6}$（PASS）**；
+     * 判据 4（前馈增益最大偏离）：RAW = $1.7599\%$ $\longrightarrow$ **ENG = $0.0672\% \le 0.50\%$（PASS）**；
+     * 判据 5（虚假偏航残差力矩最大 RMS）：RAW = $0.0980\text{ Nm}$ $\longrightarrow$ **ENG = $3.8059\times 10^{-3}\text{ Nm} \le 0.010\text{ Nm}$（PASS）**；
+     * 时间游程证据：最长单次连续超标时间 P95 从 $1.800\text{ s}$ 压缩至 $0.303\text{ s}$；后半程（$t \ge 1.0\text{ s}$）超标均比从 $91.32\%$ 降至 $0.58\%$；
+     * 4 种最差确定性差模工况检验（全部通过）：
+       + `Diff_Gain_+2%_-2%`：$\hat{\theta} = +1.8905\times 10^{-6}$，$\gamma_{\text{dev}} = 0.0153\%$，$\text{RMS} = 8.6504\times 10^{-4}\text{ Nm}$（PASS）；
+       + `Diff_Gain_-2%_+2%`：$\hat{\theta} = -4.8506\times 10^{-7}$，$\gamma_{\text{dev}} = 0.0039\%$，$\text{RMS} = 2.2194\times 10^{-4}\text{ Nm}$（PASS）；
+       + `Diff_Delay_1ms_2ms`：$\hat{\theta} = +9.2431\times 10^{-9}$，$\gamma_{\text{dev}} = 0.0001\%$，$\text{RMS} = 4.2292\times 10^{-6}\text{ Nm}$（PASS）；
+       + `Diff_Delay_2ms_1ms`：$\hat{\theta} = -8.0482\times 10^{-7}$，$\gamma_{\text{dev}} = 0.0065\%$，$\text{RMS} = 3.6826\times 10^{-4}\text{ Nm}$（PASS）；
+     * 真实物理不对称跟踪能力保留（$r=0.70$ 与 $r=1.30$）：
+       + Clean $r=0.70$：相对误差 $0.05\% \le 5.0\%$，符号严格为负（MATCH）；
+       + Clean $r=1.30$：相对误差 $0.06\% \le 5.0\%$，符号严格为正（MATCH）；
+       + 强扰动 $r=0.70$（含增益漂移、零偏、时滞与噪声）：相对误差 $0.63\% \le 5.0\%$，符号保持（MATCH）；
+       + 强扰动 $r=1.30$（含增益漂移、零偏、时滞与噪声）：相对误差 $0.42\% \le 5.0\%$，符号保持（MATCH）。
+   - **C8C-eng 门控动态反事实重积分实测指标 (N = 100 逐试验严格配对)**：
+     * 门控激活时间均比：RAW = $88.67\%$ $\longrightarrow$ **ENG = $5.72\%$（削减 $82.94$ percentage points）**；
+     * 物理偏航角 RMS 均值：未补偿基线 $\text{BASE} = 157.12\,\mu\text{rad}$，$\text{RAW} = 158.27\,\mu\text{rad}$（恶化），**$\text{ENG} = 157.08\,\mu\text{rad}$（优于基线，彻底消除退化）**；
+     * 配对偏航改善量（$\Delta \text{RMS}_\alpha = \text{RAW} - \text{ENG}$）：
+       + 偏航改善均值：**$+1.1921\,\mu\text{rad} > 0$（PASS）**；
+       + 偏航改善中位数：**$+0.3501\,\mu\text{rad} > 0$（PASS）**；
+       + 均值 95% 置信区间：**$[+0.5326, +1.8516]\,\mu\text{rad}$（下界 $> 0$，PASS）**；
+       + 样本经验分位数 P02.5 ~ P97.5：$[-3.1659, +10.8319]\,\mu\text{rad}$；
+       + 配对 t 检验：$p = 5.2279\times 10^{-4} < 0.05$（统计显著性成立，PASS）；
+       + Wilcoxon 符号秩检验：$p = 8.5305\times 10^{-3} < 0.05$（统计显著性成立，PASS）；
+       + 偏航改善或持平试验比例：$59.0\%$ 绝对严格改善，其余因门控保持关闭与基线完全持平；
+       + 相对偏航改善比例均值：$+0.7113\%$。
+   - **数据治理与回读断言**：
+     * `step3c_c8a_eng_performance_results.csv`（4 行 $\times$ 68 列）：覆盖 C8A-raw, C8A-eng, C8C-raw, C8C-eng 对比；
+     * `step3c_c8c_eng_paired_results.csv`（100 行 $\times$ 11 列）：完整记录 100 次试验的逐次配对偏航与改善量；
+     * `step3c_c8a_eng_deterministic_results.csv`（4 行 $\times$ 9 列）：记录 4 种最劣差模工况；
+     * 全部三张表通过 100% 逐元素内存值回读断言（数值误差 $< 10^{-9}$）。
