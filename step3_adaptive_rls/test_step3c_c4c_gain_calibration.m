@@ -45,7 +45,8 @@ function test_step3c_c4c_gain_calibration()
     % 收集全部测试结果记录用于 100% CSV 回读校验
     records = struct( ...
         'Subtest', {}, 'Trial_ID', {}, 'Mode', {}, 'Gain_Source', {}, ...
-        'Identifiability_Status', {}, 'True_gL', {}, 'True_gR', {}, ...
+        'Identifiability_Status', {}, 'Calibration_Profile', {}, 'Reference_Kind', {}, ...
+        'True_gL', {}, 'True_gR', {}, ...
         'Est_gL', {}, 'Est_gR', {}, 'Delta_g_Diff', {}, ...
         'Apparent_Delta_Kf', {}, 'Did_Update', {}, 'Is_Frozen', {}, ...
         'Reject_Reason', {}, 'Passed_Threshold', {}, ...
@@ -92,6 +93,7 @@ function test_step3c_c4c_gain_calibration()
     opts_c1b.Kf_nominal = Kf0;
     opts_c1b.Imax = Imax;
     opts_c1b.N_min = 200;
+    opts_c1b.reference_kind = 'HARDWARE_EXTERNAL_REFERENCE';
 
     rng(101, 'twister');
     calib_state_c1b = [];
@@ -377,6 +379,61 @@ function test_step3c_c4c_gain_calibration()
     fprintf('    [OK] Subtest C3 验收通过: 严格三阶分区判定生效 (0.05%%合格, 0.10%%临界明确报告, 0.50%%刚性拦截)!\n\n');
 
     %% =====================================================================
+    %% [Subtest C3-Ext] 仿真扩展范围标定验证 (C8A_EXTENDED_SIM_RANGE)
+    %% =====================================================================
+    fprintf('-------------------------------------------------------------------------\n');
+    fprintf('>>> [Subtest C3-Ext] 开始仿真扩展范围标定验证 (C8A_EXTENDED_SIM_RANGE)...\n');
+    fprintf('    验证参数: max_asymmetry_range = 0.05, 覆盖工业传感器容差\n');
+
+    opts_ext = struct( ...
+        'mode', 'EXTERNAL_REFERENCE', ...
+        'reference_kind', 'SIMULATED_EXTERNAL_REFERENCE', ...
+        'calibration_profile', 'C8A_EXTENDED_SIM_RANGE', ...
+        'N_min', 200, ...
+        'Kf_nominal', Kf0, ...
+        'Imax', Imax, ...
+        'max_asymmetry_range', 0.05);
+
+    gain_diff_ext = [0.005, 0.01, 0.02, 0.04];
+    for idx_ext = 1:numel(gain_diff_ext)
+        diff_ext = gain_diff_ext(idx_ext);
+        g_true_ext = [1.0 + diff_ext; 1.0];
+
+        rng(4000 + idx_ext, 'twister');
+        state_ext = [];
+        info_ext = struct();
+        info_lock = struct();
+        for k = 1:220
+            c_ref_k = [4000.0 + 1000.0*cos(0.04*k); 4000.0 + 1000.0*cos(0.04*k)];
+            c_meas_k = c_ref_k .* g_true_ext + sigma_i_c3 * randn(2, 1);
+            [~, state_ext, info_ext] = step3c_gain_calibrator( ...
+                c_meas_k, c_ref_k, [], state_ext, opts_ext);
+            if info_ext.did_update
+                info_lock = info_ext;
+            end
+        end
+
+        assert(state_ext.is_calibrated, ...
+            sprintf('C8A_EXTENDED_SIM_RANGE diff=%.3f 未成功标定', diff_ext));
+        assert(isfield(info_lock, 'did_update') && info_lock.did_update, ...
+            sprintf('C8A_EXTENDED_SIM_RANGE diff=%.3f did_update 必须为 true', diff_ext));
+        assert(strcmp(info_lock.gain_source, 'EXTERNAL_REFERENCE_SIM'), ...
+            sprintf('C8A_EXTENDED_SIM_RANGE gain_source 应为 EXTERNAL_REFERENCE_SIM (实际 %s)', info_lock.gain_source));
+        assert(strcmp(info_lock.calibration_profile, 'C8A_EXTENDED_SIM_RANGE'), ...
+            sprintf('C8A_EXTENDED_SIM_RANGE profile 应为 C8A_EXTENDED_SIM_RANGE (实际 %s)', info_lock.calibration_profile));
+
+        extra_ext_sub = struct('MC_Trial', 1, 'P95_Gain_Error', max(abs(state_ext.gain_hat - g_true_ext)), ...
+            'P95_Apparent_Delta_Kf', abs(info_lock.apparent_delta_kf));
+        records(end+1) = make_c4c_record(sprintf('C8A_EXT_DIFF_%.3f', diff_ext), idx_ext, ...
+            'EXTERNAL_REFERENCE', info_lock, g_true_ext, state_ext.gain_hat, true, extra_ext_sub);
+
+        fprintf('      - [diff=%.3f] 标定估计值=[%.4f; %.4f], gain_source=%s, profile=%s -> PASS\n', ...
+            diff_ext, state_ext.gain_hat(1), state_ext.gain_hat(2), info_lock.gain_source, info_lock.calibration_profile);
+    end
+
+    fprintf('    C8A_EXTENDED_SIM_RANGE: PASS\n\n');
+
+    %% =====================================================================
     %% [Subtest C4] 异常保护、低激励拦截、故障锁存与显式 reset 机制测试
     %% =====================================================================
     fprintf('-------------------------------------------------------------------------\n');
@@ -522,6 +579,16 @@ function rec = make_c4c_record(subtest, trial_id, mode, info, true_g, est_g, pas
     rec.Mode                   = string(mode);
     rec.Gain_Source            = string(info.gain_source);
     rec.Identifiability_Status = string(info.identifiability_status);
+    if isfield(info, 'calibration_profile')
+        rec.Calibration_Profile = string(info.calibration_profile);
+    else
+        rec.Calibration_Profile = "UNKNOWN";
+    end
+    if isfield(info, 'reference_kind')
+        rec.Reference_Kind = string(info.reference_kind);
+    else
+        rec.Reference_Kind = "UNKNOWN";
+    end
     rec.True_gL                = double(true_g(1));
     rec.True_gR                = double(true_g(2));
     rec.Est_gL                 = double(est_g(1));

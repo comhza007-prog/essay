@@ -30,6 +30,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
     if ~isfield(opts, 'th_current_min'), opts.th_current_min = 50.0; end % 最小激励电流幅值 (counts)
     if ~isfield(opts, 'N_min'), opts.N_min = 200; end                   % 最小有效标定样本数
     if ~isfield(opts, 'max_asymmetry_range'), opts.max_asymmetry_range = 0.0020; end % 标称最大允许差模 0.20%
+    if ~isfield(opts, 'reference_kind'), opts.reference_kind = 'UNKNOWN_REFERENCE'; end
+    if ~isfield(opts, 'calibration_profile'), opts.calibration_profile = 'C4C_DEFAULT'; end
     if ~isfield(opts, 'Kf_nominal'), opts.Kf_nominal = 0.00539; end     % 标称推力系数 N/count
     if ~isfield(opts, 'delay_confirmed'), opts.delay_confirmed = true; end % C4-B 时延确认标志
     if ~isfield(opts, 'reset'), opts.reset = false; end
@@ -84,6 +86,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
         calib_info.mode                   = calib_state_next.mode;
         calib_info.identifiability_status = calib_state_next.identifiability_status;
         calib_info.gain_source            = calib_state_next.gain_source;
+        calib_info.calibration_profile    = opts.calibration_profile;
+        calib_info.reference_kind         = opts.reference_kind;
         calib_info.did_update             = false;
         calib_info.is_frozen              = true;
         calib_info.reject_reason          = calib_state_next.freeze_reason;
@@ -93,11 +97,13 @@ function [current_corrected, calib_state_next, calib_info] = ...
         return;
     end
 
-    %% 3. 初始化诊断与输出结构体 (全 8 项规范字段)
+    %% 3. 初始化诊断与输出结构体 (全 10 项规范字段)
     calib_info = struct();
     calib_info.mode                   = opts.mode;
     calib_info.identifiability_status = calib_state_next.identifiability_status;
     calib_info.gain_source            = calib_state_next.gain_source;
+    calib_info.calibration_profile    = opts.calibration_profile;
+    calib_info.reference_kind         = opts.reference_kind;
     calib_info.did_update             = false;
     calib_info.is_frozen              = calib_state_next.is_frozen;
     calib_info.reject_reason          = 'NONE';
@@ -184,6 +190,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
                 calib_info.mode                   = 'EXTERNAL_REFERENCE';
                 calib_info.identifiability_status = calib_state_next.identifiability_status;
                 calib_info.gain_source            = calib_state_next.gain_source;
+                calib_info.calibration_profile    = opts.calibration_profile;
+                calib_info.reference_kind         = opts.reference_kind;
                 calib_info.did_update             = false; % 稳态防重更
                 calib_info.is_frozen              = true;
                 calib_info.reject_reason          = 'NONE';
@@ -240,7 +248,16 @@ function [current_corrected, calib_state_next, calib_info] = ...
 
                 delta_g_diff = abs(gL_hat - gR_hat);
 
-                % 差模分区判定: 超出最大允许设计校正范围 (0.20%) 则判定为超标并拒绝
+                switch opts.reference_kind
+                    case 'SIMULATED_EXTERNAL_REFERENCE'
+                        gain_source_name = 'EXTERNAL_REFERENCE_SIM';
+                    case 'HARDWARE_EXTERNAL_REFERENCE'
+                        gain_source_name = 'EXTERNAL_HARDWARE_SOURCE';
+                    otherwise
+                        gain_source_name = 'EXTERNAL_REFERENCE_UNSPECIFIED';
+                end
+
+                % 差模分区判定: 超出最大允许设计校正范围则判定为超标并拒绝
                 if delta_g_diff > opts.max_asymmetry_range
                     calib_state_next.identifiability_status = 'OUT_OF_CALIBRATION_RANGE';
                     calib_state_next.gain_source            = 'NONE';
@@ -254,6 +271,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
 
                     calib_info.identifiability_status = 'OUT_OF_CALIBRATION_RANGE';
                     calib_info.gain_source            = 'NONE';
+                    calib_info.calibration_profile    = opts.calibration_profile;
+                    calib_info.reference_kind         = opts.reference_kind;
                     calib_info.did_update             = false;
                     calib_info.is_frozen              = true;
                     calib_info.reject_reason          = 'OUT_OF_RANGE';
@@ -265,7 +284,7 @@ function [current_corrected, calib_state_next, calib_info] = ...
                     % 正常在设计范围内，完成工程标定并锁定
                     calib_state_next.gain_hat               = [gL_hat; gR_hat];
                     calib_state_next.identifiability_status = 'CALIBRATED_EXTERNAL_REFERENCE';
-                    calib_state_next.gain_source            = 'EXTERNAL_HARDWARE_SOURCE';
+                    calib_state_next.gain_source            = gain_source_name;
                     calib_state_next.is_calibrated          = true;
                     calib_state_next.is_frozen              = true;
                     calib_state_next.freeze_latched         = false;
@@ -274,7 +293,9 @@ function [current_corrected, calib_state_next, calib_info] = ...
                     calib_state_next.apparent_delta_kf      = opts.Kf_nominal * (gL_hat - gR_hat);
 
                     calib_info.identifiability_status = 'CALIBRATED_EXTERNAL_REFERENCE';
-                    calib_info.gain_source            = 'EXTERNAL_HARDWARE_SOURCE';
+                    calib_info.gain_source            = gain_source_name;
+                    calib_info.calibration_profile    = opts.calibration_profile;
+                    calib_info.reference_kind         = opts.reference_kind;
                     calib_info.did_update             = true;
                     calib_info.is_frozen              = true;
                     calib_info.reject_reason          = 'NONE';
@@ -287,6 +308,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
                 % 样本预热中
                 calib_info.identifiability_status = 'UNIDENTIFIABLE';
                 calib_info.gain_source            = 'NONE';
+                calib_info.calibration_profile    = opts.calibration_profile;
+                calib_info.reference_kind         = opts.reference_kind;
                 calib_info.did_update             = false;
                 calib_info.is_frozen              = false;
                 calib_info.reject_reason          = 'LOW_EXCITATION';

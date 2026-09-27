@@ -75,8 +75,14 @@ function res = analyze_step3c_trial_eng(base_data, cfg, opts_eng)
         gain_hat = state_gain.gain_hat;
     else
         % EXTERNAL_REFERENCE 模式，允许最大 5% 标定范围覆盖工业传感器公差
-        gain_opts = struct('mode', 'EXTERNAL_REFERENCE', 'N_min', 200, 'Kf_nominal', Kf_mean, ...
-            'Imax', Imax, 'max_asymmetry_range', 0.05);
+        gain_opts = struct( ...
+            'mode', 'EXTERNAL_REFERENCE', ...
+            'reference_kind', 'SIMULATED_EXTERNAL_REFERENCE', ...
+            'calibration_profile', 'C8A_EXTENDED_SIM_RANGE', ...
+            'N_min', 200, ...
+            'Kf_nominal', Kf_mean, ...
+            'Imax', Imax, ...
+            'max_asymmetry_range', 0.05);
         state_gain = [];
         for k = 1:220
             c_ref_k = [4000.0 + 1000.0*cos(0.04*k); 4000.0 + 1000.0*cos(0.04*k)];
@@ -123,8 +129,16 @@ function res = analyze_step3c_trial_eng(base_data, cfg, opts_eng)
 
     dL = delay_info.d_meas_hat(1);
     dR = delay_info.d_meas_hat(2);
-    if ~isfinite(dL), dL = dL_true; end
-    if ~isfinite(dR), dR = dR_true; end
+
+    delay_valid = isfinite(dL) && isfinite(dR) && ...
+                  dL >= 0 && dR >= 0 && ...
+                  mod(dL, 1) == 0 && mod(dR, 1) == 0;
+
+    assert(delay_valid, ...
+        'C8A-eng: C4-B 未输出有效估计时延，禁止使用仿真真值回退');
+
+    res_delay_source = 'C4B_ESTIMATED';
+
     dmax = max(dL, dR);
     dL_extra = dmax - dL;
     dR_extra = dmax - dR;
@@ -459,4 +473,8 @@ function res = analyze_step3c_trial_eng(base_data, cfg, opts_eng)
     res.bias_hat            = bias_hat;
     res.gain_hat            = gain_hat;
     res.d_meas_align        = [dL; dR];
+    res.delay_estimation_valid = delay_valid;
+    res.delay_used_source      = res_delay_source;
+    res.delay_true_for_audit   = [dL_true; dR_true];
+    res.delay_estimation_error = [dL; dR] - [dL_true; dR_true];
 end

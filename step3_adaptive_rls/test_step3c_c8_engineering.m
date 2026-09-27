@@ -105,6 +105,8 @@ function test_step3c_c8_engineering()
     eng_late_exceed   = zeros(N_mc_c8, 1);
     eng_first_exceed  = nan(N_mc_c8, 1);
     eng_last_exceed   = nan(N_mc_c8, 1);
+    delay_valid_eng   = false(N_mc_c8, 1);
+    delay_error_eng   = zeros(2, N_mc_c8);
 
     opts_eng = struct();
     opts_eng.gain_mode = 'EXTERNAL_REFERENCE';
@@ -191,7 +193,17 @@ function test_step3c_c8_engineering()
             eng_first_exceed(j) = t_eval_sub(idx_eng_exc(1));
             eng_last_exceed(j)  = t_eval_sub(idx_eng_exc(end));
         end
+
+        delay_valid_eng(j) = res_eng_j.delay_estimation_valid;
+        delay_error_eng(:, j) = res_eng_j.delay_estimation_error;
+        assert(res_eng_j.delay_estimation_valid, '试验 %d 时延估计无效', j);
+        assert(strcmp(res_eng_j.delay_used_source, 'C4B_ESTIMATED'), ...
+            '试验 %d 必须使用 C4-B 估计时延', j);
     end
+
+    assert(all(delay_valid_eng), '所有工程前端试验时延估计必须有效');
+    assert(max(abs(delay_error_eng), [], 'all') == 0, ...
+        'C4-B 时延估计存在非零误差');
 
     % C8A-eng 统计量聚合
     mean_exceed_time_eng   = mean(eng_exceed_rt);
@@ -413,8 +425,8 @@ function test_step3c_c8_engineering()
     fprintf('  [配对偏航改善量 (RAW - ENG)]:\n');
     fprintf('    - 偏航改善均值       : %+.4f urad (门槛 > 0)\n', mean_delta_yaw);
     fprintf('    - 偏航改善中位数     : %+.4f urad (门槛 > 0)\n', median_delta_yaw);
-    fprintf('    - 均值 95%% 置信区间  : [%+.4f, %+.4f] urad (下界 > 0)\n', ci_mean_delta(1), ci_mean_delta(2));
-    fprintf('    - 样本 P02.5 ~ P97.5 : [%+.4f, %+.4f] urad\n', sample_p025_p975(1), sample_p025_p975(2));
+    fprintf('    - 均值的 95%% t 置信区间: [%+.4f, %+.4f] urad (下界 > 0)\n', ci_mean_delta(1), ci_mean_delta(2));
+    fprintf('    - 逐试验改善量经验 P2.5-P97.5: [%+.4f, %+.4f] urad\n', sample_p025_p975(1), sample_p025_p975(2));
     fprintf('    - 配对 t 检验 p-value: %.4e (统计显著性 p < 0.05)\n', p_value_ttest);
     fprintf('    - 符号秩检验 p-value : %.4e (统计显著性 p < 0.05)\n', p_value_wilcoxon);
     fprintf('    - 改善或持平试验比例 : %d/%d (%.1f%%)\n', ...
