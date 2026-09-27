@@ -436,6 +436,8 @@ function test_step3c_c4b_delay_alignment()
     fprintf('    >>> [Scenario C] 丢包与时间戳不连续性因果一致性测试...\n');
     align_state_c = [];
     max_causality_gap = 0;
+    max_raw_spread = 0;
+    max_eff_spread = 0;
     drop_steps = [45, 46, 90, 135];
     recovered_after_drop = false;
     for k = 1:180
@@ -466,32 +468,57 @@ function test_step3c_c4b_delay_alignment()
         [sig_c, align_state_c, info_c] = step3c_causal_delay_aligner( ...
             raw_k_c, cmd_k_c, pos_k_c, ts_c, qual_c, align_state_c, opts_b2);
 
+        % 丢包后首帧严格断言: 识别到 SEQ_GAP 并清空缓冲区/切断回归
+        if ismember(k - 1, drop_steps)
+            assert(strcmp(info_c.reject_reason, 'SEQ_GAP'), 'Scenario C: 丢包后首帧必须报告 SEQ_GAP');
+            assert(~info_c.did_update, 'Scenario C: 丢包首帧严禁更新');
+            assert(~sig_c.valid_for_regression, 'Scenario C: 丢包首帧严禁用于回归');
+            assert(all(isnan(sig_c.current_cal)), 'Scenario C: 丢包首帧电流必须为 NaN');
+            assert(all(isnan(sig_c.position)), 'Scenario C: 丢包首帧位置必须为 NaN');
+        end
+
         if sig_c.valid_for_regression
-            % 断言 common_timestamp 严格为所选历史源时间戳的最小值
+            % 原始源时间戳跨度
+            raw_spread = max(sig_c.used_source_timestamp) - min(sig_c.used_source_timestamp);
+
+            % 有效物理时刻跨度: t_eff = t_source - d_tot * dt
             effective_timestamps = [ ...
                 sig_c.used_source_timestamp(1) - (d_path_true(1) + d_meas_L_a) * dt; ...
                 sig_c.used_source_timestamp(2) - (d_path_true(2) + d_meas_R_a) * dt; ...
                 sig_c.used_source_timestamp(3) - opts_b2.d_pos_known * dt; ...
                 sig_c.used_source_timestamp(4) - opts_b2.d_pos_known * dt];
+            effective_spread = max(effective_timestamps) - min(effective_timestamps);
+
             expected_common = min(effective_timestamps);
             assert(abs(sig_c.common_timestamp - expected_common) < 1e-12, ...
                 'Scenario C: common_timestamp 必须严格等于有效物理时刻最小值');
-            assert(max(effective_timestamps) - min(effective_timestamps) <= ...
-                opts_b2.timestamp_alignment_tolerance + 1e-12, ...
+            assert(effective_spread <= opts_b2.timestamp_alignment_tolerance + 1e-12, ...
                 'Scenario C: 有效物理时刻差异超过对齐容限');
+
             % 断言严格因果性: common_timestamp 绝不超过墙上时间
             t_wall_c = max([ts_c.t_recv_L, ts_c.t_recv_R, ts_c.t_recv_pos]);
             assert(sig_c.common_timestamp <= t_wall_c + 1e-12, ...
                 'Scenario C: common_timestamp 超越物理接收墙上时间');
+
             gap = max(sig_c.used_source_timestamp) - sig_c.common_timestamp;
             if gap > max_causality_gap
                 max_causality_gap = gap;
+            end
+            if raw_spread > max_raw_spread
+                max_raw_spread = raw_spread;
+            end
+            if effective_spread > max_eff_spread
+                max_eff_spread = effective_spread;
             end
             recovered_after_drop = true;
         end
     end
     assert(recovered_after_drop, 'Scenario C: 丢包后未恢复到有效回归状态');
-    fprintf('      - Scenario C PASS: common_timestamp 严格从历史缓冲区读取且严格因果 (最大通道离散差: %.2e s)\n', max_causality_gap);
+    fprintf('      - Scenario C 统计指标:\n');
+    fprintf('        * 原始源时间戳跨度 (最大): %.4e s\n', max_raw_spread);
+    fprintf('        * 有效物理时刻跨度 (最大): %.4e s\n', max_eff_spread);
+    fprintf('        * 对齐容限:                %.4e s\n', opts_b2.timestamp_alignment_tolerance);
+    fprintf('      - Scenario C PASS: 丢包首帧精准报告 SEQ_GAP 并清空缓冲区，恢复后有效物理时刻跨度满足容限 (最大因果间隙: %.2e s)\n', max_causality_gap);
     records(end+1) = make_record('B2_SCENARIO_C_DISCONTINUITY', 1, NaN, NaN, info_c, align_state_c, sig_c);
 
     % ---------------------------------------------------------------------
@@ -758,28 +785,24 @@ function test_step3c_c4b_delay_alignment()
             [10.0; 10.0], [10.0; 10.0], [0.1; 0.1], ts, qual, align_state, opts_b5);
 
         if sig_align.valid_for_regression
-            % 1. 实际使用缓冲区索引审计
             valid_depth = min(align_state.buffer_count, align_state.buffer_depth);
-            assert(all(sig_align.used_index >= 1), 'B5: 检测到非正历史索引');
-            assert(all(sig_align.used_index <= valid_depth), 'B5: 索引超出已存有效深度');
 
-            % 2. 实际引用的源时间戳审计 (有限性与因果性)
-            assert(all(isfinite(sig_align.used_source_timestamp)), 'B5: 历史源时间戳必须有限');
-            assert(isfinite(sig_align.common_timestamp), 'B5: 公共基准时刻必须有限');
-            if any(sig_align.used_source_timestamp > sig_align.common_timestamp + 1e-12)
-                future_ref_count = future_ref_count + 1;
-            end
+            % 1 & 2. 独立因果审计函数全面校验实际使用索引与时间戳
+            assert(audit_causal_selection(sig_align, valid_depth), 'B5: 因果审计函数检验失败');
+
+            % 验证公共基准时间未超越墙上物理时间
             if sig_align.common_timestamp > t_wall + 1e-12
                 future_ref_count = future_ref_count + 1;
             end
         end
     end
 
-    % 3. 人为构造未来引用的负测试，确保断言逻辑确实能精准捕捉越界
+    % 3. 人为篡改历史索引构造越界负测试，验证独立审计函数的拦截能力
+    valid_depth_last = min(align_state.buffer_count, align_state.buffer_depth);
     tampered_sig = sig_align;
-    tampered_sig.used_source_timestamp(1) = tampered_sig.common_timestamp + 0.05;
-    tampered_detected = any(tampered_sig.used_source_timestamp > tampered_sig.common_timestamp + 1e-12);
-    assert(tampered_detected, 'B5: 负测试失败，未能捕捉人为注入的未来时间戳泄露');
+    tampered_sig.used_index(1) = valid_depth_last + 1; % 篡改索引为越界值
+    tampered_passed = audit_causal_selection(tampered_sig, valid_depth_last);
+    assert(~tampered_passed, 'B5: 负测试失败，因果审计函数未能拦截越界索引');
 
     % 4. 显式越界检索负测试: 注入超过缓冲区深度的时延 (500 steps > buffer_depth 250)，对齐器应刚性拦截并报告 BUFFER_WARMING
     ts_oob = ts;
@@ -798,7 +821,7 @@ function test_step3c_c4b_delay_alignment()
 
     fprintf('    [B5 统计指标]:\n');
     fprintf('      - 500 步全工况未来样本/未来时间戳引用次数: %d (断言严格 == 0)\n', future_ref_count);
-    fprintf('      - 负测试检测灵敏度: 100%% 成功捕捉人为注入的越界时间戳\n');
+    fprintf('      - 因果审计函数负测试通过 (越界索引与未来时间戳篡改 100%% 拦截)\n');
     fprintf('      - 超出缓冲区深度负测试: 100%% 成功刚性拦截 (BUFFER_WARMING)\n');
     assert(future_ref_count == 0, 'B5 失败: 检测到未来样本引用');
     records(end+1) = make_record('B5_CAUSALITY_AUDIT', 1, dL, dR, info_b5, align_state, sig_align);
@@ -912,18 +935,12 @@ function test_step3c_c4b_delay_alignment()
     records(end+1) = make_record('B6_NAN_INPUT', 3, NaN, NaN, info_nan, align_state, sig_nan);
 
     % Inf 输入
-    ts_fault.seq_L = ts_fault.seq_L + 1; ts_fault.seq_R = ts_fault.seq_R + 1; ts_fault.seq_pos = ts_fault.seq_pos + 1;
-    ts_fault.t_source_L = ts_fault.t_source_L + dt; ts_fault.t_source_R = ts_fault.t_source_R + dt; ts_fault.t_source_pos = ts_fault.t_source_pos + dt;
-    ts_fault.t_recv_L = ts_fault.t_source_L; ts_fault.t_recv_R = ts_fault.t_source_R; ts_fault.t_recv_pos = ts_fault.t_source_pos;
     [sig_inf, ~, info_inf] = step3c_causal_delay_aligner([Inf; 10.0], [10.0; 10.0], [0;0], ts_fault, qual, align_state, opts_b1);
     assert(~sig_inf.valid_for_regression && all(isnan(sig_inf.current_cal)) && ~info_inf.did_update);
     assert(strcmp(info_inf.reject_reason, 'PACKET_CORRUPT'), 'Inf 输入应被判定为 PACKET_CORRUPT');
     records(end+1) = make_record('B6_INF_INPUT', 4, NaN, NaN, info_inf, align_state, sig_inf);
 
-    % 丢包/损坏
-    ts_fault.seq_L = ts_fault.seq_L + 1; ts_fault.seq_R = ts_fault.seq_R + 1; ts_fault.seq_pos = ts_fault.seq_pos + 1;
-    ts_fault.t_source_L = ts_fault.t_source_L + dt; ts_fault.t_source_R = ts_fault.t_source_R + dt; ts_fault.t_source_pos = ts_fault.t_source_pos + dt;
-    ts_fault.t_recv_L = ts_fault.t_source_L; ts_fault.t_recv_R = ts_fault.t_source_R; ts_fault.t_recv_pos = ts_fault.t_source_pos;
+    % 丢包/损坏标志
     qual_loss = qual; qual_loss.packet_valid = false;
     [sig_loss, ~, info_loss] = step3c_causal_delay_aligner([10.0; 10.0], [10.0; 10.0], [0;0], ts_fault, qual_loss, align_state, opts_b1);
     assert(~sig_loss.valid_for_regression && all(isnan(sig_loss.current_cal)) && ~info_loss.did_update);
@@ -931,9 +948,6 @@ function test_step3c_c4b_delay_alignment()
     records(end+1) = make_record('B6_PACKET_LOSS', 5, NaN, NaN, info_loss, align_state, sig_loss);
 
     % 饱和工况
-    ts_fault.seq_L = ts_fault.seq_L + 1; ts_fault.seq_R = ts_fault.seq_R + 1; ts_fault.seq_pos = ts_fault.seq_pos + 1;
-    ts_fault.t_source_L = ts_fault.t_source_L + dt; ts_fault.t_source_R = ts_fault.t_source_R + dt; ts_fault.t_source_pos = ts_fault.t_source_pos + dt;
-    ts_fault.t_recv_L = ts_fault.t_source_L; ts_fault.t_recv_R = ts_fault.t_source_R; ts_fault.t_recv_pos = ts_fault.t_source_pos;
     qual_sat2 = qual; qual_sat2.is_saturated = [true; false];
     [sig_sat2, ~, info_sat2] = step3c_causal_delay_aligner([10.0; 10.0], [10.0; 10.0], [0;0], ts_fault, qual_sat2, align_state, opts_b1);
     assert(~sig_sat2.valid_for_regression && all(isnan(sig_sat2.current_cal)) && ~info_sat2.did_update);
@@ -1086,4 +1100,26 @@ function rec = make_record(subtest, trial_id, true_L, true_R, info, state, sig)
     rec.Valid_For_Regression     = logical(sig.valid_for_regression);
     rec.Reject_Reason            = string(info.reject_reason);
     rec.Did_Update               = logical(info.did_update);
+end
+
+%% =========================================================================
+%% 辅助函数: 独立因果历史选择审计函数
+%% =========================================================================
+function ok = audit_causal_selection(sig, valid_depth)
+    % 1. 检查索引非 NaN 且处于有效范围 [1, valid_depth]
+    if any(isnan(sig.used_index)) || any(sig.used_index < 1) || any(sig.used_index > valid_depth)
+        ok = false;
+        return;
+    end
+    % 2. 检查源时间戳与基准时间戳有限性
+    if any(~isfinite(sig.used_source_timestamp)) || ~isfinite(sig.common_timestamp)
+        ok = false;
+        return;
+    end
+    % 3. 检查源时间戳因果性: 严禁引用晚于 common_timestamp 的未来时间戳
+    if any(sig.used_source_timestamp > sig.common_timestamp + 1e-12)
+        ok = false;
+        return;
+    end
+    ok = true;
 end

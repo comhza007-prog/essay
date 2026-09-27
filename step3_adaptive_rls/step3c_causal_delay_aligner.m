@@ -204,7 +204,8 @@ function [signals_aligned, align_state_next, delay_info] = ...
         return;
     end
 
-    % 序列号单调性检查 (防包乱序、回滚与重复)
+    % 序列号单调性与连续性检查
+    % 1. 防包乱序、回滚与重复 (seq <= last_seq)
     if opts.strict_sequence
         if (align_state_next.last_seq_L >= 0 && timestamp.seq_L <= align_state_next.last_seq_L) || ...
            (align_state_next.last_seq_R >= 0 && timestamp.seq_R <= align_state_next.last_seq_R) || ...
@@ -223,6 +224,42 @@ function [signals_aligned, align_state_next, delay_info] = ...
             delay_info.did_update    = false;
             return;
         end
+    end
+
+    % 2. 丢包与序列号跳变连续性检查 (seq ~= last_seq + 1)
+    if (align_state_next.last_seq_L >= 0 && timestamp.seq_L ~= align_state_next.last_seq_L + 1) || ...
+       (align_state_next.last_seq_R >= 0 && timestamp.seq_R ~= align_state_next.last_seq_R + 1) || ...
+       (align_state_next.last_seq_pos_L >= 0 && seq_p_L ~= align_state_next.last_seq_pos_L + 1) || ...
+       (align_state_next.last_seq_pos_R >= 0 && seq_p_R ~= align_state_next.last_seq_pos_R + 1)
+        delay_info.reject_reason = 'SEQ_GAP';
+        delay_info.did_update    = false;
+        % 丢包意味着历史连续性被打断，必须清空缓冲区与重置锁定状态，防止使用丢包前的历史做错误回归
+        align_state_next.buffer_count          = 0;
+        align_state_next.current_buffer_L(:)   = NaN;
+        align_state_next.current_buffer_R(:)   = NaN;
+        align_state_next.command_buffer_L(:)   = NaN;
+        align_state_next.command_buffer_R(:)   = NaN;
+        align_state_next.position_buffer_L(:)  = NaN;
+        align_state_next.position_buffer_R(:)  = NaN;
+        align_state_next.t_source_buffer_L(:)     = NaN;
+        align_state_next.t_source_buffer_R(:)     = NaN;
+        align_state_next.t_source_buffer_pos_L(:) = NaN;
+        align_state_next.t_source_buffer_pos_R(:) = NaN;
+        align_state_next.is_initialized        = false;
+        align_state_next.last_trusted_delay    = [NaN; NaN];
+        align_state_next.last_trusted_total    = [NaN; NaN];
+        align_state_next.candidate_delay       = [NaN; NaN];
+        align_state_next.confirm_count         = [0; 0];
+        % 更新最后序列号与时间戳至当前帧，以便后续报文可以连续递推重入
+        align_state_next.last_seq_L            = timestamp.seq_L;
+        align_state_next.last_seq_R            = timestamp.seq_R;
+        align_state_next.last_seq_pos_L        = seq_p_L;
+        align_state_next.last_seq_pos_R        = seq_p_R;
+        align_state_next.last_ts_L             = timestamp.t_source_L;
+        align_state_next.last_ts_R             = timestamp.t_source_R;
+        align_state_next.last_ts_pos_L         = t_src_pos_L;
+        align_state_next.last_ts_pos_R         = t_src_pos_R;
+        return;
     end
 
     % 时间戳严格单调递增性检查
