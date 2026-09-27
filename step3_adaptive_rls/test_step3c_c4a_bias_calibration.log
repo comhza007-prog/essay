@@ -73,7 +73,7 @@
    Gate C4-A 单元测试验收结论: 全部 PASS
 =========================================================================
    Subtest A1 (MC 100 标称):  P95(e_trial) = 1.2817 counts <= 2.0 counts [PASS]
-   Subtest A2 (准入破坏 10 例): 非法准入累计更新次数 = 0             [PASS]
+   Subtest A2 (准入破坏 12 例): 非法准入累计更新次数 = 0             [PASS]
    Subtest A3 (中途扰动):     有效计数清零，状态复位回退 IDLE       [PASS]
    Subtest A4 (FROZEN锁定):   强运动工况参数漂移 < 1e-15 counts    [PASS]
    Subtest A5 (样本不足):     有效计数 300 < 500 禁止进入 FROZEN    [PASS]
