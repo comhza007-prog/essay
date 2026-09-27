@@ -62,10 +62,36 @@ function [current_corrected, calib_state_next, calib_info] = ...
         calib_state.is_frozen              = false;
         calib_state.is_calibrated          = false;
         calib_state.apparent_delta_kf      = 0.0;
+        calib_state.freeze_latched         = false;
+        calib_state.freeze_reason          = 'NONE';
+    end
+
+    if ~isfield(calib_state, 'freeze_latched')
+        calib_state.freeze_latched = false;
+        calib_state.freeze_reason  = 'NONE';
     end
 
     calib_state_next = calib_state;
     calib_state_next.mode = opts.mode;
+
+    %% 2.1 故障锁存前置检查 (未显式 reset 前刚性保持硬拦截，禁止偷偷恢复)
+    if isfield(calib_state_next, 'freeze_latched') && ...
+            calib_state_next.freeze_latched && ~opts.reset
+
+        current_corrected = current_in;
+
+        calib_info = struct();
+        calib_info.mode                   = calib_state_next.mode;
+        calib_info.identifiability_status = calib_state_next.identifiability_status;
+        calib_info.gain_source            = calib_state_next.gain_source;
+        calib_info.did_update             = false;
+        calib_info.is_frozen              = true;
+        calib_info.reject_reason          = calib_state_next.freeze_reason;
+        calib_info.gain_residual          = calib_state_next.gain_residual;
+        calib_info.apparent_delta_kf      = calib_state_next.apparent_delta_kf;
+
+        return;
+    end
 
     %% 3. 初始化诊断与输出结构体 (全 8 项规范字段)
     calib_info = struct();
@@ -80,34 +106,40 @@ function [current_corrected, calib_state_next, calib_info] = ...
 
     current_corrected = current_in; % 默认安全直通
 
-    %% 4. 前置严密有效性校验 (门禁过滤)
-    % 4.1 数值非有限检查 (NaN/Inf)
+    %% 4. 前置严密有效性校验 (门禁过滤与故障锁存)
+    % 4.1 数值非有限检查 (NaN/Inf) -> 故障锁存
     if any(~isfinite(current_in))
         calib_info.reject_reason          = 'NONFINITE_INPUT';
         calib_info.identifiability_status = 'INVALID_INPUT';
         calib_info.did_update             = false;
         calib_info.is_frozen              = true;
         calib_state_next.is_frozen        = true;
+        calib_state_next.freeze_latched   = true;
+        calib_state_next.freeze_reason    = 'NONFINITE_INPUT';
         current_corrected                 = current_in;
         return;
     end
 
-    % 4.2 电流饱和刚性拦截 (严禁在饱和区更新与校正)
+    % 4.2 电流饱和刚性拦截 (严禁在饱和区更新与校正) -> 故障锁存
     if any(abs(current_in) >= opts.th_sat)
         calib_info.reject_reason          = 'SATURATION';
         calib_info.did_update             = false;
         calib_info.is_frozen              = true;
         calib_state_next.is_frozen        = true;
+        calib_state_next.freeze_latched   = true;
+        calib_state_next.freeze_reason    = 'SATURATION';
         current_corrected                 = current_in;
         return;
     end
 
-    % 4.3 前置通信时延因果对齐状态检查 (Gate C4-B 联动)
+    % 4.3 前置通信时延因果对齐状态检查 (Gate C4-B 联动) -> 故障锁存
     if ~opts.delay_confirmed
         calib_info.reject_reason          = 'UNCONFIRMED_DELAY';
         calib_info.did_update             = false;
         calib_info.is_frozen              = true;
         calib_state_next.is_frozen        = true;
+        calib_state_next.freeze_latched   = true;
+        calib_state_next.freeze_reason    = 'UNCONFIRMED_DELAY';
         current_corrected                 = current_in;
         return;
     end
@@ -127,6 +159,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
             calib_state_next.identifiability_status = 'CALIBRATED_ORACLE_SIM';
             calib_state_next.is_calibrated          = true;
             calib_state_next.is_frozen              = true;
+            calib_state_next.freeze_latched         = false;
+            calib_state_next.freeze_reason          = 'NONE';
             calib_state_next.gain_residual          = abs(calib_state_next.gain_hat - [1.0; 1.0]);
             calib_state_next.apparent_delta_kf      = opts.Kf_nominal * (calib_state_next.gain_hat(1) - calib_state_next.gain_hat(2));
 
@@ -166,6 +200,9 @@ function [current_corrected, calib_state_next, calib_info] = ...
                 calib_info.identifiability_status = 'INVALID_INPUT';
                 calib_info.did_update             = false;
                 calib_info.is_frozen              = true;
+                calib_state_next.is_frozen        = true;
+                calib_state_next.freeze_latched   = true;
+                calib_state_next.freeze_reason    = 'NONFINITE_INPUT';
                 current_corrected                 = current_in;
                 return;
             end
@@ -176,6 +213,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
                 calib_info.identifiability_status = 'UNIDENTIFIABLE';
                 calib_info.did_update             = false;
                 calib_info.is_frozen              = true;
+                calib_state_next.freeze_latched   = false;
+                calib_state_next.freeze_reason    = 'NONE';
                 current_corrected                 = current_in;
                 return;
             end
@@ -207,6 +246,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
                     calib_state_next.gain_source            = 'NONE';
                     calib_state_next.is_calibrated          = false;
                     calib_state_next.is_frozen              = true;
+                    calib_state_next.freeze_latched         = true;
+                    calib_state_next.freeze_reason          = 'OUT_OF_RANGE';
                     calib_state_next.gain_hat               = [1.0; 1.0];
                     calib_state_next.gain_residual          = [delta_g_diff; delta_g_diff];
                     calib_state_next.apparent_delta_kf      = opts.Kf_nominal * (gL_hat - gR_hat);
@@ -227,6 +268,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
                     calib_state_next.gain_source            = 'EXTERNAL_HARDWARE_SOURCE';
                     calib_state_next.is_calibrated          = true;
                     calib_state_next.is_frozen              = true;
+                    calib_state_next.freeze_latched         = false;
+                    calib_state_next.freeze_reason          = 'NONE';
                     calib_state_next.gain_residual          = abs(calib_state_next.gain_hat - [1.0; 1.0]);
                     calib_state_next.apparent_delta_kf      = opts.Kf_nominal * (gL_hat - gR_hat);
 
@@ -247,6 +290,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
                 calib_info.did_update             = false;
                 calib_info.is_frozen              = false;
                 calib_info.reject_reason          = 'LOW_EXCITATION';
+                calib_state_next.freeze_latched   = false;
+                calib_state_next.freeze_reason    = 'NONE';
                 current_corrected                 = current_in;
             end
 
@@ -260,6 +305,8 @@ function [current_corrected, calib_state_next, calib_info] = ...
             calib_state_next.gain_source            = 'SYMMETRIC_MOTION_ASSUMPTION';
             calib_state_next.is_calibrated          = false;
             calib_state_next.is_frozen              = true;
+            calib_state_next.freeze_latched         = false;
+            calib_state_next.freeze_reason          = 'NONE';
             
             % 计算表观不对称比例
             if all(abs(current_in) > opts.th_current_min)
