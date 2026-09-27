@@ -676,6 +676,15 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
          $$d_{\text{path}} = d_{\text{act}} + d_{\text{driver}}$$
          $$d_{\text{total}} = d_{\text{path}} + d_{\text{meas}} = d_{\text{act}} + d_{\text{driver}} + d_{\text{meas}}$$
          它**绝不是纯量测通信延迟 $d_{\text{meas}}$**！若直接将 $d_{\text{total}}$ 用于延迟位置通道，会将执行器机械/电气与驱动响应延迟 $d_{\text{path}}$ 重复叠加，造成新的虚假回归时间错配。
+     * **架构规范与八大契约整改实现**：
+       1. **配置完备性与缓冲区深度断言**：显式支持 `max_position_delay`（默认等于 `max_search_delay`）、`d_pos_known`（默认 `NaN`）、`require_position_alignment`（默认 `true`）、`strict_sequence`（默认 `true`）；刚性断言 `buffer_depth >= xcorr_window_length + max_search_delay + max_position_delay + 1`，彻底杜绝历史回溯下溢；
+       2. **独立通道迟滞确认状态机**：维护两轴独立候选时延与确认计数器 `confirm_count = [0; 0]` 及 `candidate_delay = [NaN; NaN]`，仅当左右两轴同时满足连续 $\ge N_{\text{confirm}}$ 步稳定相同时，才原子更新 `last_trusted_delay`，避免单轴瞬态跳变；
+       3. **前置入队校验与饱和冻结红线**：在报文压入历史缓冲区前，严格执行时间戳有限性（`PACKET_CORRUPT`）、物理因果方向 $t_{\text{recv}} \ge t_{\text{source}}$（`NEGATIVE_DELAY`）、时钟域一致性（`CLOCK_MISMATCH`）、序列号单调性（`SEQ_ROLLBACK`）、源时间戳单调递增性（`PACKET_CORRUPT`）以及输入电流/指令饱和检查（`SATURATION`），饱和期与异常期绝对禁止污染历史缓冲区和递推指针；
+       4. **位置通道双源时间戳健全支持**：全面兼容单一位置时间戳与独立左右位置时间戳（`t_source_pos_L`, `t_source_pos_R`），当左右位置采样时刻异步差值超标时刚性拦截（`POSITION_ASYNC`）；
+       5. **`TIMESTAMP` 模式同步预热与零更新安全保障**：预热期内历史深度不足时，刚性输出 `signals_aligned.current_cal = [NaN; NaN]`, `signals_aligned.position = [NaN; NaN]`, `valid_for_regression = false`，且 `delay_info.did_update = false`，下游 SVF/RLS 更新次数严格为 0；
+       6. **`XCORR_KNOWN_PATH` 模式绝对对齐与位置时延强约束**：通过互相关提取总延迟并扣除已知前向路径 $d_{\text{meas,hat}} = d_{\text{total,hat}} - d_{\text{path,known}}$；若无已知位置延迟模型（`isnan(opts.d_pos_known)`），则明确界定差模电流有效但绝对对齐无效：`current_pair_valid = true`，`absolute_alignment_valid = false`，`valid_for_regression = false`，输出 `[NaN; NaN]`，原因码置为 `POSITION_DELAY_UNKNOWN`；在位置延迟已知时，以 $d_{\text{common}} = \max([d_{\text{tot},L}, d_{\text{tot},R}, d_{\text{pos}}])$ 精准因果回溯历史样本；
+       7. **`DIFF_ONLY` 模式门控与强制安全降级**：同步引入饱和、低激励（`th_cmd_var`）、峰值不显著与双轴迟滞确认门控；输出强制赋值 `current_pair_delay_estimate_valid = true`，`current_pair_valid = false`，`absolute_alignment_valid = false`，`valid_for_regression = false`，信号与时延全输出 `NaN`，完全切断回归准入；
+       8. **对齐信号四元审计向量导出**：`signals_aligned` 显式提供四元素索引向量 `used_index = [idx_iL; idx_iR; idx_posL; idx_posR]` 与时间戳向量 `used_source_timestamp`，支撑因果引用的严格形式化审计。
      * **三种工作模式与降级规则**：
        1. `TIMESTAMP`（源采样时间戳硬对齐，工程主路径）：
           - 前提条件：三路通道具备统一硬件时钟基准（`clock_id_L == clock_id_R == clock_id_pos`）、时间戳严格单调递增、报文序列号无回滚且无不可恢复丢包；
@@ -715,15 +724,15 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
        + 准入条件：仅在高电流指令变化率（$\operatorname{Var}(\dot{i}_{\text{cmd}}) \ge \sigma_{\text{di,th}}^2$）、无电流饱和（`~any(quality.is_saturated)` 且 $|i_{\text{cmd}}| \le 0.95 I_{\max}$）、报文与量测完全有效（`quality.packet_valid && all(quality.current_valid) && all(quality.position_valid)`）、且滑动相关第一峰与第二峰峰值差超越显著性门限（$\rho_1 - \rho_2 \ge \Delta \rho_{\text{th}}$）时方可触发更新；
        + 平稳段、饱和段、多峰模糊或时钟/序列号异常时严格保持 `did_update = false`，维持 `last_trusted_delay`；
        + 迟滞确认机制：连续 $N_{\text{confirm}} \ge 5$ 步检测到相同时延阶跃方可切换，杜绝单步噪声尖峰引起的缓冲区跳变。
-     * **六项基准子测试集 (B1 ~ B6) 实测指标与关键硬断言 (已全面 PASS 并闭环归档)**：
-       + `B1` (时间戳模式硬对齐测试，8 组典型时延工况)：覆盖 `[0,0,0], [1,0,0], [0,1,0], [2,1,0], [1,2,0], [2,0,1], [0,2,2], [2,2,0]` 全工况，8 组试验中时延识别误差严格为 **$0\text{ samples}$**，残余差模严格为 **$0\text{ samples}$**，对齐后信号与目标物理时刻真值最大残差 $\le 1.82 \times 10^{-12} \text{ counts/m} < 10^{-10}$，**PASS**；
-       + `B2` (已知 $d_{\text{path}} = [2; 2]$ 互相关模式，MC 100 蒙特卡洛测试)：纯通信时延 $d_{\text{meas}} \in \{0, 1, 2, 3\}\text{ samples}$，100 次 MC 双通道精确识别正确率达 **$100.0\% \ge 95.0\%$**，平均互相关置信度为 **$1.000$**，**PASS**；
-       + `B3` (未知 $d_{\text{path}}$ 差模降级测试 `DIFF_ONLY`)：识别差模 $\Delta d_{\text{hat}} = 1.0\text{ sample}$（真值 $d_{\text{tot},L} - d_{\text{tot},R} = 4 - 3 = 1$）；绝对时延 $d_{\text{meas,hat}}$ 严格输出 **`[NaN; NaN]`**；三级标志位严格输出 `current_pair_valid = true`，`absolute_alignment_valid = false`，`valid_for_regression = false`；输出信号赋值为 `[NaN; NaN]`；未显式声明 `assume_symmetric_path = true` 时刚性拒绝更新（`reject_reason = 'ASYMMETRIC_PATH_UNASSUMED'`, `did_update = false`），**PASS**；
-       + `B4` (稳健门控与迟滞防误触发测试)：低变化率激励段（直流）刚性拦截（`reject_reason = 'LOW_EXCITATION'`, `did_update = false`）；电流饱和状态（`is_saturated = true`）刚性拦截（`reject_reason = 'SATURATION'`, `did_update = false`）；连续 2 步瞬态时延毛刺（$d_{\text{tot}} = 5 \to 3$ 步突变）未达 5 步确认门限，时延锁定不受污染，迟滞防抖全面生效，**PASS**；
-       + `B5` (严格因果性硬检查)：500 步全工况动态网络时滞运行中，未来样本/未来时间戳引用次数严格为 **$0$**（断言严格 $\equiv 0$）；公共参考时间始终满足 $t_{\text{common}} \le t_{\text{source}} \le t_{\text{wall}}$，**PASS**；
-       + `B6` (预热期与异常输入防护)：预热期严格输出 `valid_for_regression = false`，输出信号赋值 `[NaN; NaN]`；下游 SVF/RLS 在预热期更新次数严格为 **$0$**（绝对冻结）；有效期内非有限项（NaN/Inf）数量严格为 **$0$**；负时延（$d_{\text{total}} < d_{\text{path}}$）刚性拦截（`reject_reason = 'NEGATIVE_DELAY'`, `did_update = false`），截零伪装次数严格为 **$0$**；报文损坏（`PACKET_CORRUPT`）、时钟域失配（`CLOCK_MISMATCH`）与序列号倒退（`SEQ_ROLLBACK`）全数被刚性拦截，**PASS**；
-       + `数据治理与回读校验`：蒙特卡洛明细数据完整导出至 `step3c_c4b_delay_results.csv`（100 行 $\times$ 9 列），全部 9 列（含 `Trial_ID, Subtest, RNG_Seed, True_Meas_Delay_L/R, Est_Meas_Delay_L/R, Xcorr_Confidence, Is_Correct`）执行 100% 逐列逐元素严格内存回读校验（数值残差 $< 10^{-9}$），断言全数通过。
-     * **验收门状态**：**Gate C4-B 时延识别与因果历史对齐单元测试正式通过并闭环归档**。
+     * **六项基准子测试集 (B1 ~ B6) 实测指标与关键硬断言**：
+       + `B1` (时间戳模式硬对齐测试，8 组正常工况 + 5 组异常时间戳负测试)：8 组正常试验中时延识别误差严格为 **$0\text{ samples}$**，信号与目标物理时刻真值最大残差 $\le 1.82 \times 10^{-12} < 10^{-10}$；5 组异常时间戳（接收早于发射、时间戳 NaN、序列号重复、时钟域失配、位置采样左右异步）100% 刚性拦截，**PASS**；
+       + `B2` (已知非对称 $d_{\text{path}} = [2; 4], d_{\text{pos}} = 1$ 互相关模式，MC 100 蒙特卡洛测试)：100 次 MC 双通道精确识别正确率达 **$100.0\% \ge 95.0\%$**，实际因果对齐信号与物理时刻真值最大残差严格为 **$0.00\text{e}+00 < 10^{-10}$**；且在位置延迟未知时刚性切断回归准入，**PASS**；
+       + `B3` (未知 $d_{\text{path}}$ 差模降级测试 `DIFF_ONLY`)：识别差模 $\Delta d_{\text{hat}} = 1.0\text{ sample}$，绝对时延与信号严格全输出 **`NaN`**；未显式声明对称性时拒绝更新（`ASYMMETRIC_PATH_UNASSUMED`）；电流饱和与低激励状态全数精准拦截，**PASS**；
+       + `B4` (严格五步迟滞确认与防抖防误触发测试)：注入宽带激励阶跃时延（$d_{\text{tot}} = 3 \to 5$），第 1~4 步确认计数递增（1~4）并刚性维持上一可信延迟 `[1; 1]`，第 5 步达到门限精准切换至 `[3; 3]` 并触发 `did_update = true`；仅持续 2 步的时延噪声毛刺（$d_{\text{tot}} = 7$）未达 5 步门限，时延零污染，**PASS**；
+       + `B5` (严格因果性硬检查与索引审计)：500 步全工况动态网络时滞运行中，历史索引合法性 100% 达标，未来样本/未来时间戳引用次数严格为 **$0$**；人为注入未来引用的负测试捕获灵敏度达 **$100\%$**，**PASS**；
+       + `B6` (预热期、异常保护与零更新硬断言)：预热期下游 SVF/RLS 更新次数严格为 **$0$**；负时延（$d_{\text{total}} < d_{\text{path}}$）刚性拦截（`NEGATIVE_DELAY`），截零伪装次数严格为 **$0$**；NaN/Inf/丢包/饱和下有效更新严格全为 **$0$**，**PASS**；
+       + `数据治理与 100% 内存逐列逐元素回读校验`：全部测试记录完整导出至 `step3c_c4b_delay_results.csv`（130 行 $\times$ 21 列），覆盖 `Subtest`, `Trial_ID`, `True_Delay_L/R`, `Estimated_Delay_L/R`, `Candidate_Delay_L/R`, `Confirm_Count_L/R`, `Trusted_Delay_L/R`, `Used_Index_L/R/Pos`, `Common_Timestamp`, `Current_Pair_Valid`, `Absolute_Alignment_Valid`, `Valid_For_Regression`, `Reject_Reason`, `Did_Update` 全部 21 列；执行 100% 逐列逐元素严格内存回读校验（数值残差 $< 10^{-9}$，文本与逻辑完全匹配），断言全数通过。
+     * **验收门状态**：**`NOT_ACCEPTED / OPEN`**（已全面完成 8 大架构缺陷修复与严格单元测试全 PASS，测试日志与 21 列 CSV 治理完备，提请用户正式评审；待用户批准后方可关闭，严禁擅自提前进入 Gate C4-C）。
 
    - **验收门 3: Test C4-C（增益校正与可辨识性界定）**：
      * **定位与可辨识性红线**：承认纯回采量测（电流+位置）数学上不可解耦传感器增益误差 $\delta_g$ 与推力系数不对称 $\Delta K_f$。“对称运行段相对增益校准”只能作为假设性通道均衡，不可宣称为绝对增益标定；

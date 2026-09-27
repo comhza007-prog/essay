@@ -5,69 +5,68 @@
 >>> [OK] 被测因果对齐器入口已就绪: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_causal_delay_aligner.m
 
 -------------------------------------------------------------------------
->>> [Subtest B1] 开始 TIMESTAMP 模式硬件时间戳因果对齐测试...
-    目标: 验证已知源时间戳下对齐误差严格为 0 samples, 残余差模严格为 0
-    [Case 1] 注入 (dL=0, dR=0, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 0.00e+00
-    [Case 2] 注入 (dL=1, dR=0, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.36e-12
-    [Case 3] 注入 (dL=0, dR=1, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.82e-12
-    [Case 4] 注入 (dL=2, dR=1, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.59e-12
-    [Case 5] 注入 (dL=1, dR=2, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.59e-12
-    [Case 6] 注入 (dL=2, dR=0, dpos=1) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.59e-12
-    [Case 7] 注入 (dL=0, dR=2, dpos=2) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.82e-12
-    [Case 8] 注入 (dL=2, dR=2, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 6.94e-15
-    [OK] Subtest B1 验收通过: 8 组工况时延识别误差严格为 0 samples, 残差差模严格为 0!
+>>> [Subtest B1] 开始 TIMESTAMP 模式硬件时间戳因果对齐与异常拦截测试...
+    目标: 验证已知源时间戳下对齐误差严格为 0 samples, 异常时间戳全面拦截
+    [Normal Case 1] 注入 (dL=0, dR=0, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 0.00e+00
+    [Normal Case 2] 注入 (dL=1, dR=0, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.36e-12
+    [Normal Case 3] 注入 (dL=0, dR=1, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.82e-12
+    [Normal Case 4] 注入 (dL=2, dR=1, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.59e-12
+    [Normal Case 5] 注入 (dL=1, dR=2, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.59e-12
+    [Normal Case 6] 注入 (dL=2, dR=0, dpos=1) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.59e-12
+    [Normal Case 7] 注入 (dL=0, dR=2, dpos=2) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 1.82e-12
+    [Normal Case 8] 注入 (dL=2, dR=2, dpos=0) -> 识别时延误差 = 0 samples, 信号对齐最大残差 = 6.94e-15
+    >>> 执行 B1 异常时间戳与时钟 domain 负测试 (5 组)...
+    [OK] Subtest B1 验收通过: 8 组正常工况与 5 组异常时间戳全面闭环刚性拦截!
 
 -------------------------------------------------------------------------
->>> [Subtest B2] 开始 XCORR_KNOWN_PATH 互相关时延识别蒙特卡洛测试 (MC 100)...
-    设定: d_path_known = [2; 2], d_meas in {0, 1, 2, 3} samples
+>>> [Subtest B2] 开始 XCORR_KNOWN_PATH 互相关识别与实际对齐真值校验 (MC 100)...
+    设定: 非对称路径 d_path_known = [2; 4], 已知位置延迟 d_pos_known = 1
     [B2 统计指标]:
       - 100 次 MC 双通道精确识别正确率: 100.0% (验收门限 >= 95.0%)
-      - 平均互相关置信度: 1.000
-    [OK] Subtest B2 验收通过: 已知路径互相关识别率达 100.0% >= 95.0%!
+      - 100 次 MC 对齐信号与物理时刻真值最大残差: 0.00e+00 (断言 < 1e-10)
+    [OK] Subtest B2 验收通过: 识别正确率 100.0%, 真实对齐误差严格 < 1e-10, 无位置延迟时刚性切断回归!
 
 -------------------------------------------------------------------------
->>> [Subtest B3] 开始 DIFF_ONLY 未知路径差模降级模式测试...
-    [B3 合法降级结果]:
-      - 识别差模 Delta_d_hat: 1.0 samples (真值 = 1)
-      - 绝对时延 d_meas_hat:  [NaN; NaN] (必须强制为 NaN)
-      - current_pair_valid:       1 (应为 1)
-      - absolute_alignment_valid: 0 (必须为 0)
-      - valid_for_regression:     0 (必须为 0)
-    [OK] Subtest B3 验收通过: 未知路径下 DIFF_ONLY 强制输出 NaN 并切断回归准入!
+>>> [Subtest B3] 开始 DIFF_ONLY 未知路径差模降级与门控保护测试...
+    [OK] Subtest B3 验收通过: DIFF_ONLY 强制输出 NaN、全面配置门控并切断回归准入!
 
 -------------------------------------------------------------------------
->>> [Subtest B4] 开始稳健门控与迟滞防误触发测试...
-    [OK] Case 1: 低变化率激励段成功拦截 (LOW_EXCITATION, did_update = false)
-    [OK] Case 2: 电流饱和状态成功拦截 (SATURATION, did_update = false)
-    [OK] Case 3: 瞬态毛刺未满 5 步确认门限，时延锁定未受污染
-    [OK] Subtest B4 验收通过: 稳健门控与迟滞防抖机制全面生效!
+>>> [Subtest B4] 开始严格五步迟滞确认测试 (Step 1~4 保持, Step 5 切换, 毛刺不切换)...
+      - 阶跃第 1 步: candidate=[5,5], confirm_cnt=[1,1], trusted=[1,1], did_update=0
+      - 阶跃第 2 步: candidate=[5,5], confirm_cnt=[2,2], trusted=[1,1], did_update=0
+      - 阶跃第 3 步: candidate=[5,5], confirm_cnt=[3,3], trusted=[1,1], did_update=0
+      - 阶跃第 4 步: candidate=[5,5], confirm_cnt=[4,4], trusted=[1,1], did_update=0
+      - 阶跃第 5 步: candidate=[5,5], confirm_cnt=[5,5], trusted=[3,3], did_update=1
+    [OK] Subtest B4 验收通过: 五步迟滞确认机制完全生效 (Step 1~4 刚性维持, Step 5 精准确认切换, 毛刺零污染)!
 
 -------------------------------------------------------------------------
->>> [Subtest B5] 开始因果历史索引硬检查 (未来样本引用次数统计)...
+>>> [Subtest B5] 开始严格因果性硬检查与实际使用历史索引审计 (500 步全工况)...
     [B5 统计指标]:
-      - 500 步运行中未来样本/未来时间戳引用次数: 0 (断言严格 == 0)
-    [OK] Subtest B5 验收通过: 严格因果历史对齐成立，未来样本引用次数为 0!
+      - 500 步全工况未来样本/未来时间戳引用次数: 0 (断言严格 == 0)
+      - 负测试检测灵敏度: 100% 成功捕捉人为注入的越界时间戳
+    [OK] Subtest B5 验收通过: 严格因果索引审计成立，未来样本引用次数严格为 0!
 
 -------------------------------------------------------------------------
->>> [Subtest B6] 开始预热期、异常防护与下游回归冻结硬断言测试...
-    [OK] Case 1: 预热期全输出 NaN，下游 RLS 更新完全冻结，有效期非有限项为 0
-    [OK] Case 2: 负时延拒绝生效 (NEGATIVE_DELAY)，截零伪装次数严格为 0
-    [OK] Case 3: 报文损坏、时钟域失配、序列号倒退全数被刚性拦截
-    [OK] Subtest B6 验收通过: 预热/异常保护与下游冻结全部闭环!
+>>> [Subtest B6] 开始预热期零更新硬断言与异常输入防护测试...
+    [OK] Case 1: 预热期 1~3 步全输出 NaN，下游更新严格为 0
+    [OK] Case 2: 负时延拒绝生效 (NEGATIVE_DELAY)，截零伪装次数与下游更新严格为 0
+    [OK] Case 3: NaN/Inf/丢包/饱和下 valid_for_regression 全为 0，下游更新完全冻结
+    [OK] Subtest B6 验收通过: 预热零更新、截零伪装零容忍与异常保护全闭环!
 
 -------------------------------------------------------------------------
->>> 正在导出 Gate C4-B 蒙特卡洛结果表: C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_c4b_delay_results.csv
-    [OK] CSV 写入完成，共计 100 行 x 9 列
->>> 执行 CSV 全部 9 列 100% 逐元素严格内存回读校验...
-    [OK] CSV 全部 9 列 100% 逐元素严格回读断言全数通过!
+>>> 正在导出 Gate C4-B 完整结果表 (包含 B1~B6 全测试集): C:\Users\Lenovo\Desktop\论文\早期\论文\起重机\output\step3_adaptive_rls\step3c_c4b_delay_results.csv
+    [OK] CSV 写入完成，共计 130 行 x 21 列
+>>> 执行 CSV 全部 21 列 100% 逐元素严格内存回读校验...
+    [OK] CSV 全部 21 列 100% 逐元素严格回读断言全数通过!
 
 =========================================================================
-   Gate C4-B 单元测试验收结论: 全部 PASS
+   Gate C4-B 单元测试重测结论: 全部 PASS
 =========================================================================
-   Subtest B1 (TIMESTAMP 8 组工况): 对齐误差严格 0 samples        [PASS]
-   Subtest B2 (XCORR MC 100 识别): 正确率 = 100.0% >= 95.0%        [PASS]
-   Subtest B3 (DIFF_ONLY 降级):    强制 NaN 并禁止回归输入        [PASS]
-   Subtest B4 (稳健门控与迟滞):    饱和/低激励拦截, 毛刺防抖确认 [PASS]
-   Subtest B5 (因果性硬检验):      未来样本引用次数严格 == 0      [PASS]
-   Subtest B6 (预热与异常防护):    下游 RLS 冻结, 截零伪装 == 0   [PASS]
+   Subtest B1 (TIMESTAMP 8+5 工况): 识别误差 0, 5 组异常时间戳全面拦截 [PASS]
+   Subtest B2 (XCORR MC 100 识别):  正确率 100.0%, 真实对齐误差 < 1e-10 [PASS]
+   Subtest B3 (DIFF_ONLY 门控降级): 强制 NaN, 拒绝非对称, 饱和/低激励拦截 [PASS]
+   Subtest B4 (严格五步迟滞防抖):   1~4 步维持, 第 5 步切换, 毛刺零污染 [PASS]
+   Subtest B5 (因果性硬检验审计):   历史索引合法, 未来引用次数严格 == 0 [PASS]
+   Subtest B6 (预热与异常输入防护): 预热零更新, 截零零容忍, 异常全冻结   [PASS]
+   数据治理与完整回读:              CSV 21 列 100% 逐列逐元素回读校验一致  [PASS]
 =========================================================================
