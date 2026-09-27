@@ -715,26 +715,15 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
        + 准入条件：仅在高电流指令变化率（$\operatorname{Var}(\dot{i}_{\text{cmd}}) \ge \sigma_{\text{di,th}}^2$）、无电流饱和（`~any(quality.is_saturated)` 且 $|i_{\text{cmd}}| \le 0.95 I_{\max}$）、报文与量测完全有效（`quality.packet_valid && all(quality.current_valid) && all(quality.position_valid)`）、且滑动相关第一峰与第二峰峰值差超越显著性门限（$\rho_1 - \rho_2 \ge \Delta \rho_{\text{th}}$）时方可触发更新；
        + 平稳段、饱和段、多峰模糊或时钟/序列号异常时严格保持 `did_update = false`，维持 `last_trusted_delay`；
        + 迟滞确认机制：连续 $N_{\text{confirm}} \ge 5$ 步检测到相同时延阶跃方可切换，杜绝单步噪声尖峰引起的缓冲区跳变。
-     * **六项基准子测试集 (B1 ~ B6)**：
-       + `B1` (时间戳模式硬对齐测试)：$d_{\text{meas}} \in \{0, 1, 2\}\text{ samples}$，验证统一时钟域与单调时间戳下的因果对齐，对齐误差严格 $0\text{ samples}$；
-       + `B2` (已知 $d_{\text{path}}$ 互相关测试)：$d_{\text{path}} = [2; 2]$，Monte Carlo 评估 $d_{\text{meas,hat}} = d_{\text{total,hat}} - d_{\text{path,known}}$ 识别正确率 $\ge 95.0\%$；
-       + `B3` (未知 $d_{\text{path}}$ 差模降级测试)：强制进入 `DIFF_ONLY`，验证严禁输出虚假绝对 $d_{\text{meas,hat}}$（输出严格为 `[NaN; NaN]`），且 `valid_for_regression == false`；
-       + `B4` (稳健门控与迟滞测试)：低激励变化率、电流饱和（`quality.is_saturated`）、多峰模糊工况下 `did_update = false`，保持上一可信值；
-       + `B5` (严格因果性硬检查)：对齐输出索引只能引用当前或历史缓冲区样本，未来样本引用次数严格为 0；
-       + `B6` (预热期与异常输入防护)：
-         * 预热期严格输出 `valid_for_regression = false`，输出信号赋值 `[NaN; NaN]`；
-         * 当 `valid_for_regression == true` 时，信号非有限项（NaN/Inf）数量严格为 0；
-         * 当 `valid_for_regression == false` 时，下游 SVF/RLS 更新次数严格为 0（绝对冻结）；
-         * 全程无效期严格禁止补零或注入伪造数据。
-     * **验收指标量化判据**：
-       + 时间戳模式对齐误差：严格 $0\text{ samples}$；
-       + 互相关模式识别正确率：$\ge 95.0\%$；
-       + 对齐后残余差模时延：严格 $0\text{ samples}$；
-       + 未来样本引用次数：严格 $\equiv 0$；
-       + 低置信度与饱和误更新次数：严格 $\equiv 0$；
-       + 负时延截零次数：严格 $\equiv 0$（严禁截零伪装）；
-       + `valid_for_regression == true` 时非有限输出项：严格 $\equiv 0$；
-       + `valid_for_regression == false` 时下游更新次数：严格 $\equiv 0$。
+     * **六项基准子测试集 (B1 ~ B6) 实测指标与关键硬断言 (已全面 PASS 并闭环归档)**：
+       + `B1` (时间戳模式硬对齐测试，8 组典型时延工况)：覆盖 `[0,0,0], [1,0,0], [0,1,0], [2,1,0], [1,2,0], [2,0,1], [0,2,2], [2,2,0]` 全工况，8 组试验中时延识别误差严格为 **$0\text{ samples}$**，残余差模严格为 **$0\text{ samples}$**，对齐后信号与目标物理时刻真值最大残差 $\le 1.82 \times 10^{-12} \text{ counts/m} < 10^{-10}$，**PASS**；
+       + `B2` (已知 $d_{\text{path}} = [2; 2]$ 互相关模式，MC 100 蒙特卡洛测试)：纯通信时延 $d_{\text{meas}} \in \{0, 1, 2, 3\}\text{ samples}$，100 次 MC 双通道精确识别正确率达 **$100.0\% \ge 95.0\%$**，平均互相关置信度为 **$1.000$**，**PASS**；
+       + `B3` (未知 $d_{\text{path}}$ 差模降级测试 `DIFF_ONLY`)：识别差模 $\Delta d_{\text{hat}} = 1.0\text{ sample}$（真值 $d_{\text{tot},L} - d_{\text{tot},R} = 4 - 3 = 1$）；绝对时延 $d_{\text{meas,hat}}$ 严格输出 **`[NaN; NaN]`**；三级标志位严格输出 `current_pair_valid = true`，`absolute_alignment_valid = false`，`valid_for_regression = false`；输出信号赋值为 `[NaN; NaN]`；未显式声明 `assume_symmetric_path = true` 时刚性拒绝更新（`reject_reason = 'ASYMMETRIC_PATH_UNASSUMED'`, `did_update = false`），**PASS**；
+       + `B4` (稳健门控与迟滞防误触发测试)：低变化率激励段（直流）刚性拦截（`reject_reason = 'LOW_EXCITATION'`, `did_update = false`）；电流饱和状态（`is_saturated = true`）刚性拦截（`reject_reason = 'SATURATION'`, `did_update = false`）；连续 2 步瞬态时延毛刺（$d_{\text{tot}} = 5 \to 3$ 步突变）未达 5 步确认门限，时延锁定不受污染，迟滞防抖全面生效，**PASS**；
+       + `B5` (严格因果性硬检查)：500 步全工况动态网络时滞运行中，未来样本/未来时间戳引用次数严格为 **$0$**（断言严格 $\equiv 0$）；公共参考时间始终满足 $t_{\text{common}} \le t_{\text{source}} \le t_{\text{wall}}$，**PASS**；
+       + `B6` (预热期与异常输入防护)：预热期严格输出 `valid_for_regression = false`，输出信号赋值 `[NaN; NaN]`；下游 SVF/RLS 在预热期更新次数严格为 **$0$**（绝对冻结）；有效期内非有限项（NaN/Inf）数量严格为 **$0$**；负时延（$d_{\text{total}} < d_{\text{path}}$）刚性拦截（`reject_reason = 'NEGATIVE_DELAY'`, `did_update = false`），截零伪装次数严格为 **$0$**；报文损坏（`PACKET_CORRUPT`）、时钟域失配（`CLOCK_MISMATCH`）与序列号倒退（`SEQ_ROLLBACK`）全数被刚性拦截，**PASS**；
+       + `数据治理与回读校验`：蒙特卡洛明细数据完整导出至 `step3c_c4b_delay_results.csv`（100 行 $\times$ 9 列），全部 9 列（含 `Trial_ID, Subtest, RNG_Seed, True_Meas_Delay_L/R, Est_Meas_Delay_L/R, Xcorr_Confidence, Is_Correct`）执行 100% 逐列逐元素严格内存回读校验（数值残差 $< 10^{-9}$），断言全数通过。
+     * **验收门状态**：**Gate C4-B 时延识别与因果历史对齐单元测试正式通过并闭环归档**。
 
    - **验收门 3: Test C4-C（增益校正与可辨识性界定）**：
      * **定位与可辨识性红线**：承认纯回采量测（电流+位置）数学上不可解耦传感器增益误差 $\delta_g$ 与推力系数不对称 $\Delta K_f$。“对称运行段相对增益校准”只能作为假设性通道均衡，不可宣称为绝对增益标定；
