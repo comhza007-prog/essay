@@ -547,12 +547,19 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
      * `step3c_causal_delay_aligner.m`：通信时延估计与因果历史对齐缓冲。
 
 2. **模块接口契约规范**：
-   - **电流通道校准模块接口**：
+   - **电流通道校准模块接口（状态递推架构）**：
      ```matlab
-     [current_cal, calib_info] = step3c_current_channel_calibrator(current_raw, cmd, state, opts);
+     [current_cal, calib_state_next, calib_info] = ...
+         step3c_current_channel_calibrator( ...
+             current_raw, cmd, motion, calib_state, opts);
      ```
-     * 输入：`current_raw` (原始回采量 $i_{\text{meas},L/R}$)，`cmd` (控制器指令 $i_{\text{cmd},L/R}$)，`state` (运动状态 $v_G, \omega, a_G$ 及驱动使能标志 `drive_torque_disabled`)，`opts` (校准配置参数)；
-     * 输出：`current_cal` (校准后电流 $i_{\text{cal},L/R}$)，`calib_info` (标定状态机：`is_calibrated`, `bias_hat`, `gain_scale`)。
+     * 数据契约与结构体定义：
+       + `current_raw = [iL_meas; iR_meas]`（双通道原始量测列向量）；
+       + `cmd = struct('iL', iL_cmd, 'iR', iR_cmd)`（控制器输出指令）；
+       + `motion = struct('vG', vG, 'omega', omega, 'aG', aG, 'drive_torque_disabled', logical_flag)`（台车刚体运动状态与驱动使能标志）；
+       + `calib_state = struct('mode', 'IDLE', 'buffer_L', [], 'buffer_R', [], 'valid_count', 0, 'bias_hat', [0; 0], 'gain_scale', [1; 1], 'is_calibrated', false)`（校准器内部跨步递推状态）；
+       + `opts`（配置参数结构体：`calibration_duration`, `N_min`, `min_retained_ratio`, `th_cmd`, `th_v`, `th_omega`, `th_a` 等）；
+       + **C4-A 阶段红线**：固定 `gain_scale = [1; 1]`，严禁在零偏测试中暗含任何增益校正。
    - **因果时延对齐模块接口**：
      ```matlab
      [signals_aligned, delay_info] = step3c_causal_delay_aligner(current_cal, position, timestamp, opts);
@@ -564,10 +571,29 @@ $$\text{projected\_oob\_count} = 0, \quad \text{nonfinite\_count} = 0, \quad P_k
 
    - **验收门 1: Test C4-A（霍尔传感器静态零偏标定单元测试）**：
      * **定位**：独立的电流量测零偏校准单元测试，**不运行 RLS，不接闭环控制**；
-     * **刚性采样准入判据**：仅在驱动输出关闭、PWM 禁用或零转矩校准状态下采样：
+     * **刚性采样准入判据**：仅在驱动输出关闭、PWM 禁用或零转矩校准状态下采样（六项同时满足）：
        $$|i_{\text{cmd},L}| \le \text{th}_{\text{cmd}}, \quad |i_{\text{cmd},R}| \le \text{th}_{\text{cmd}}, \quad |v_G| \le \text{th}_v, \quad |\omega| \le \text{th}_\omega, \quad |a_G| \le \text{th}_a, \quad \text{drive\_torque\_disabled} == \text{true}$$
-     * **算法要求**：采用 Hampel / MAD 稳健统计与中位数估计 $\hat{i}_{\text{bias}} = \operatorname{median}(i_{\text{meas}})$，严禁使用普通代数均值；
-     * **验收指标**：零偏真值范围 $[-30, +30]\text{ counts}$，高斯噪声 $\sigma_i = 10\text{ counts}$，100 次蒙特卡洛评估，必须满足 $P_{95}(|\hat{i}_{\text{bias}} - i_{\text{bias,true}}|) \le 2.0\text{ counts}$；非静止或使能激活状态严禁更新；标定结束后参数锁定冻结，不得受运动动态电流污染。
+     * **校准状态机转移逻辑与原因码**：
+       + `IDLE`：合法样本 $\to$ 转移至 `ACCUMULATING`；非法样本 $\to$ 保持 `IDLE`；
+       + `ACCUMULATING`：合法样本 $\to$ 继续累计；非法样本 $\to$ **中止并清空窗口，回退至 `IDLE`**；有效样本满足 $N_{\min}$ 且估计有效 $\to$ 转移至 `FROZEN`；
+       + `FROZEN`：**永久保持 `bias_hat`，绝不更新**；仅显式 `reset` 重置；标定完成后的运动工况绝不污染已冻结参数；禁止未完成估计直接冻结；
+       + 状态原因码：`calib_info.reject_reason` 显式给出 `'NONE' | 'DRIVE_ENABLED' | 'CMD_NONZERO' | 'MOTION_NONZERO' | 'NONFINITE_INPUT' | 'INSUFFICIENT_SAMPLES'`。
+     * **最小采样量与稳健算法**：
+       + 采用 Hampel / MAD 稳健统计与中位数估计 $\hat{i}_{\text{bias}} = \operatorname{median}(i_{\text{meas}})$，严禁使用普通代数均值；
+       + 在 $1\text{ kHz}$ 下固定：`opts.calibration_duration = 0.5; opts.N_min = ceil(opts.calibration_duration / dt);`（500 步）；`opts.min_retained_ratio = 0.9;`（至少保留 90% 样本）；
+       + 冻结门限：双轴共同满足 $N_{\text{eff},L} \ge N_{\min} \cdot \text{min\_retained\_ratio}$ 且 $N_{\text{eff},R} \ge N_{\min} \cdot \text{min\_retained\_ratio}$。
+     * **双轴最坏误差定义与正式验收判据**：
+       + 每次试验定义双轴最坏绝对误差：
+         $$e_L = |\hat{i}_{\text{bias},L} - i_{\text{bias,true},L}|, \quad e_R = |\hat{i}_{\text{bias},R} - i_{\text{bias,true},R}|, \quad e_{\text{trial}} = \max(e_L, e_R)$$
+       + 零偏真值范围 $[-30, +30]\text{ counts}$，高斯噪声 $\sigma_i = 10\text{ counts}$，100 次蒙特卡洛评估；
+       + **主判据**：**$P_{95}(e_{\text{trial}}) \le 2.0\text{ counts}$**；同时导出并记录 $P_{95}(e_L)$, $P_{95}(e_R)$, $P_{95}(e_{\text{trial}})$, $\max(e_{\text{trial}})$。
+     * **六项子测试集 (A1 ~ A6) 与关键硬断言**：
+       + `A1`：100 次 MC 标称高斯噪声精度测试；
+       + `A2`：逐个破坏六项准入条件，确认 0 次更新（`assert(update_count_when_inadmissible == 0)`）；
+       + `A3`：累计中途注入运动扰动，确认窗口清零并退回 `IDLE`；
+       + `A4`：进入 `FROZEN` 后注入大运动电流，确认参数绝对锁定（`assert(max(abs(bias_after_motion - bias_before_motion)) < 1e-15)`）；
+       + `A5`：样本不足（$< N_{\min}$），确认严禁进入 `FROZEN`（`assert(~is_calibrated_when_insufficient)`）；
+       + `A6`：2% 脉冲异常点 ($\pm 100\text{ counts}$) 与 NaN/Inf 非有限输入保护，确认 Hampel 正确剔除，输出与状态始终有限（`assert(all(isfinite(current_cal)))`），且 $P_{95}(e_{\text{trial}}) \le 2.0\text{ counts}$ 仍成立。
 
    - **验收门 2: Test C4-B（时延识别与因果对齐单元测试）**：
      * **定位**：固定已知增益与零偏，独立评估通信时延估计器与因果对齐缓冲区；
