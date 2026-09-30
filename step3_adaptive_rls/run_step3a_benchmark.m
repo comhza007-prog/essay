@@ -11,6 +11,7 @@
 clear; clc; close all;
 
 ws_dir = fileparts(pwd);
+addpath(fullfile(ws_dir, 'common'));
 addpath(fullfile(ws_dir, 'step1_baseline_c0'));
 addpath(fullfile(ws_dir, 'step2_advanced_controllers'));
 addpath(pwd);
@@ -288,8 +289,13 @@ fprintf('  -> [OK] step3a_parameter_identification.png 保存完成\n');
 
 %% 5. 生成高学术规格图表 2: step3a_closed_loop_comparison.png
 fprintf('>>> 正在绘制学术图表 2: step3a_closed_loop_comparison.png ...\n');
+set(groot, ...
+    'defaultAxesFontName', 'Microsoft YaHei', ...
+    'defaultTextFontName', 'Microsoft YaHei', ...
+    'defaultLegendFontName', 'Microsoft YaHei');
+
 fig2 = figure('Name', 'Step3A_Closed_Loop_Comparison', 'Color', 'w', ...
-    'Units', 'pixels', 'Position', [100, 100, 1400, 950], 'Visible', 'off');
+    'Units', 'pixels', 'Position', [80, 80, 1500, 950], 'Visible', 'off');
 
 % Subplot 1: 位移跟踪误差比较
 subplot(2, 2, 1);
@@ -300,64 +306,118 @@ xline(3.3, 'k--', 'LineWidth', 1.0, 'DisplayName', '载荷突变');
 grid on; box on;
 xlabel('时间 t (s)', 'FontSize', 11, 'FontWeight', 'bold');
 ylabel('位移跟踪误差 e_{yG} (mm)', 'FontSize', 11, 'FontWeight', 'bold');
-title('(a) 平动位移跟踪误差时域对比', 'FontSize', 12, 'FontWeight', 'bold');
+title('(a) 平动位移跟踪误差', 'FontSize', 12, 'FontWeight', 'bold');
 legend('Location', 'northwest', 'FontSize', 9);
 
-% Subplot 2: 左右电机控制电流对比
+% Subplot 2: 左右电机控制电流对比及限幅
 subplot(2, 2, 2);
-plot(d3.t, d3.iL_cmd, 'Color', [0.85, 0.33, 0.10], 'LineWidth', 1.2, 'DisplayName', 'C2a i_L');
+
+hC2a = plot(d3.t, d3.iL_cmd, ...
+    'Color', [0.85, 0.33, 0.10], ...
+    'LineWidth', 1.2, ...
+    'DisplayName', 'C2a i_L');
 hold on;
-plot(d3.t, log_iL_c3a, 'b-', 'LineWidth', 1.2, 'DisplayName', 'C3a i_L (自适应)');
-plot(d3.t, log_iR_c3a, 'm--', 'LineWidth', 1.2, 'DisplayName', 'C3a i_R (自适应)');
-yline(4500, 'r--', 'LineWidth', 1.0, 'DisplayName', 'I_{max} = 4500');
-yline(-4500, 'r--', 'LineWidth', 1.0);
+
+hC3aL = plot(d3.t, log_iL_c3a, ...
+    'b-', 'LineWidth', 1.2, ...
+    'DisplayName', 'C3a i_L');
+
+hC3aR = plot(d3.t, log_iR_c3a, ...
+    'm--', 'LineWidth', 1.2, ...
+    'DisplayName', 'C3a i_R');
+
+hImax = yline(4500, 'r--', ...
+    'LineWidth', 1.0, ...
+    'HandleVisibility', 'on');
+
+% 负限幅线不进入图例
+yline(-4500, 'r--', ...
+    'LineWidth', 1.0, ...
+    'HandleVisibility', 'off');
+
 grid on; box on;
 xlabel('时间 t (s)', 'FontSize', 11, 'FontWeight', 'bold');
 ylabel('电机电流指令 (count)', 'FontSize', 11, 'FontWeight', 'bold');
-title('(b) 控制电流指令平稳性对比 (三级限幅)', 'FontSize', 12, 'FontWeight', 'bold');
-legend('Location', 'northeast', 'FontSize', 9);
+title('(b) 控制电流指令及限幅', 'FontSize', 12, 'FontWeight', 'bold');
+
+legend([hC2a, hC3aL, hC3aR, hImax], ...
+    {'C2a i_L', 'C3a i_L', 'C3a i_R', '\pm I_{max}=4500'}, ...
+    'Location', 'northoutside', ...
+    'NumColumns', 2, ...
+    'FontSize', 8);
 ylim([-5000, 5000]);
 
-% Subplot 3: 偏转角时域收敛 (对称模型一致性检查)
+% Subplot 3: 偏转角响应
 subplot(2, 2, 3);
-plot(d3.t, d3.alpha * 1e3, 'Color', [0.85, 0.33, 0.10], 'LineWidth', 1.5, 'DisplayName', 'C2a 偏转角 \alpha');
+
+hAlphaC2a = plot(d3.t, d3.alpha * 1e3, ...
+    'Color', [0.85, 0.33, 0.10], ...
+    'LineStyle', '-', ...
+    'LineWidth', 1.5, ...
+    'DisplayName', 'C2a');
+
 hold on;
-plot(d3.t, log_alpha_c3a * 1e3, 'b-', 'LineWidth', 1.8, 'DisplayName', 'C3a 偏转角 \alpha');
-text(0.05, 0.85, sprintf('对称模型一致性检查:\n完全对称纯净工况(d=0, \\delta_{fric}=0)下\n偏转角恒为零，验证理论模型与算法一致性'), ...
-    'Units', 'normalized', 'FontSize', 9, 'BackgroundColor', [0.95, 0.95, 0.95], 'EdgeColor', [0.8, 0.8, 0.8]);
-grid on; box on;
+
+hAlphaC3a = plot(d3.t, log_alpha_c3a * 1e3, ...
+    'Color', 'b', ...
+    'LineStyle', '--', ...
+    'LineWidth', 1.8, ...
+    'DisplayName', 'C3a');
+
+grid on;
+box on;
+
 xlabel('时间 t (s)', 'FontSize', 11, 'FontWeight', 'bold');
 ylabel('偏转角 \alpha (mrad)', 'FontSize', 11, 'FontWeight', 'bold');
-title('(c) 对称模型一致性检查 (d=0, \delta_{fric}=0 纯净工况)', 'FontSize', 12, 'FontWeight', 'bold');
-legend('Location', 'southeast', 'FontSize', 9);
+title('(c) 偏转角响应', 'FontSize', 12, 'FontWeight', 'bold');
+
+legend([hAlphaC2a, hAlphaC3a], ...
+    {'C2a', 'C3a'}, ...
+    'Location', 'southoutside', ...
+    'NumColumns', 2, ...
+    'FontSize', 8);
+
 ylim([-0.5, 0.5]);
 
-% Subplot 4: 控制动作平滑度 (TV) 与闭环质量自适应历程
+% Subplot 4: 闭环质量参数估计
 subplot(2, 2, 4);
-yyaxis left;
-plot(d3.t, log_M_est_cl, 'b-', 'LineWidth', 2.0, 'DisplayName', '闭环前馈质量 M_{tot,hat}(t)');
+
+hMEst = plot(d3.t, log_M_est_cl, ...
+    'b-', ...
+    'LineWidth', 2.0, ...
+    'DisplayName', 'C3a 估计质量');
+
 hold on;
-plot(d3.t, d3.M_true, 'k--', 'LineWidth', 1.5, 'DisplayName', '物理真值 M_{true}');
-ylabel('自适应前馈质量 (kg)', 'FontSize', 11, 'FontWeight', 'bold');
-ylim([12, 19]);
 
-yyaxis right;
-bar_tv = [tv_c2a, tv_c3a];
-% 绘制平稳性小柱状图或文字说明
-text(0.5, 0.25, sprintf('TV 比值 = TV_{C3a} / TV_{C2a}\n= %.1f / %.1f = %.3f\n<= 1.10 (有限时域数值有界)', ...
-    tv_c3a, tv_c2a, tv_ratio), 'Units', 'normalized', ...
-    'FontSize', 11, 'FontWeight', 'bold', 'BackgroundColor', [0.95, 0.95, 1.0], ...
-    'EdgeColor', 'b', 'Margin', 8);
-ylabel('控制量总变差 (TV 指标)', 'FontSize', 11, 'FontWeight', 'bold');
+hMTrue = plot(d3.t, d3.M_true, ...
+    'k--', ...
+    'LineWidth', 1.5, ...
+    'DisplayName', '真实质量');
 
-grid on; box on;
+grid on;
+box on;
+
 xlabel('时间 t (s)', 'FontSize', 11, 'FontWeight', 'bold');
-title('(d) 闭环自适应质量前馈注入与 TV 平稳性验证', 'FontSize', 12, 'FontWeight', 'bold');
-legend('Location', 'northwest', 'FontSize', 9);
+ylabel('质量估计 (kg)', 'FontSize', 11, 'FontWeight', 'bold');
+
+title('(d) 闭环质量参数估计', ...
+    'FontSize', 12, ...
+    'FontWeight', 'bold');
+
+legend([hMEst, hMTrue], ...
+    {'C3a 估计质量', '真实质量'}, ...
+    'Location', 'northwest', ...
+    'FontSize', 8);
+
+ylim([12, 19]);
 
 exportgraphics(fig2, 'step3a_closed_loop_comparison.png', 'Resolution', 300);
 close(fig2);
-fprintf('  -> [OK] step3a_closed_loop_comparison.png 保存完成\n');
+doc_fig_dir = fullfile(pwd, '..', 'docs', 'figures');
+if exist(doc_fig_dir, 'dir')
+    copyfile('step3a_closed_loop_comparison.png', fullfile(doc_fig_dir, 'step3a_closed_loop_comparison.png'));
+end
+fprintf('  -> [OK] step3a_closed_loop_comparison.png 保存完成 (并已同步归档到 docs/figures)\n');
 
 %% 6. 导出 step3a_metrics_summary.csv (分列记录开环离线回放与 C3a 闭环辨识)
 fprintf('>>> 正在导出 step3a_metrics_summary.csv ...\n');
