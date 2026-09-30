@@ -23,6 +23,7 @@ if ~exist('is_test_runner', 'var')
 end
 
 %% 1. 参数加载与往复轨迹规划
+addpath(fullfile(pwd, '..', 'common'));
 addpath(fullfile(pwd, '..', 'step1_baseline_c0'));
 [ctrl, mech, plant] = param_init();
 
@@ -451,61 +452,122 @@ end
 fprintf('======================================================================================================================================================================================================================\n\n');
 
 %% 7. 绘制两套独立的六控制器对比图 (Imax=16000 与 Imax=4500)
+set(groot, ...
+    'defaultAxesFontName', 'Microsoft YaHei', ...
+    'defaultTextFontName', 'Microsoft YaHei', ...
+    'defaultLegendFontName', 'Microsoft YaHei');
+
+shared_legend_labels = { ...
+    '期望轨迹 y_d', ...
+    'C0', ...
+    'C1', ...
+    'C2a-IL', ...
+    'C2a-SA', ...
+    'C2b-IL', ...
+    'C2b-SA', ...
+    '\pm I_{max}'};
+
 for g_idx = 1:2
     Imax_val = groups(g_idx).Imax;
-    fig = figure('Color', 'w', 'Position', [60, 60, 1280, 800]);
+    fig = figure('Color', 'w', 'Position', [60, 60, 1400, 900], 'Visible', 'off');
     idx_offset = (g_idx - 1) * 6;
     
-    % (a) 质心往复位移跟踪
-    subplot(2, 2, 1); hold on; grid on; box on;
-    plot(traj.t, traj.y, 'k:', 'LineWidth', 1.6, 'DisplayName', '期望往复轨迹 y_d');
+    % (a) 位移响应
+    ax_a = axes('Position', [0.08, 0.56, 0.40, 0.31]); hold on; grid on; box on;
+    plot(traj.t, traj.y, 'k:', 'LineWidth', 1.6);
     for c_id = 1:6
         res_curr = results_recip(idx_offset + c_id);
         plot(res_curr.t, res_curr.yG, 'Color', res_curr.color, 'LineStyle', res_curr.line_style, ...
-            'LineWidth', res_curr.line_width, 'DisplayName', res_curr.ctrl_name);
+            'LineWidth', res_curr.line_width);
     end
-    xlabel('时间 t (s)'); ylabel('质心位移 y_G (m)');
-    title(sprintf('(a) 往复位移跟踪响应 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Southeast', 'FontSize', 7.5);
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('质心位移 y_G (m)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(a) 位移响应', 'FontSize', 11, 'FontWeight', 'bold');
     
-    % (b) 左右同步误差对比
-    subplot(2, 2, 2); hold on; grid on; box on;
+    % (b) 同步误差
+    ax_b = axes('Position', [0.56, 0.56, 0.40, 0.31]); hold on; grid on; box on;
     for c_id = 1:6
         res_curr = results_recip(idx_offset + c_id);
         plot(res_curr.t, res_curr.esync, 'Color', res_curr.color, 'LineStyle', res_curr.line_style, ...
-            'LineWidth', res_curr.line_width, 'DisplayName', res_curr.ctrl_name);
+            'LineWidth', res_curr.line_width);
     end
-    xlabel('时间 t (s)'); ylabel('同步误差 y_R - y_L (mm)');
-    title(sprintf('(b) 往复全周期同步误差对比 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Northeast', 'FontSize', 7.5);
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('同步误差 y_R - y_L (mm)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(b) 同步误差', 'FontSize', 11, 'FontWeight', 'bold');
     
-    % (c) 横梁偏转偏角 alpha
-    subplot(2, 2, 3); hold on; grid on; box on;
+    % (c) 偏转角
+    ax_c = axes('Position', [0.08, 0.14, 0.40, 0.30]); hold on; grid on; box on;
     for c_id = 1:6
         res_curr = results_recip(idx_offset + c_id);
         plot(res_curr.t, res_curr.alpha * 1e3, 'Color', res_curr.color, 'LineStyle', res_curr.line_style, ...
-            'LineWidth', res_curr.line_width, 'DisplayName', res_curr.ctrl_name);
+            'LineWidth', res_curr.line_width);
     end
-    xlabel('时间 t (s)'); ylabel('横梁偏角 \alpha (mrad)');
-    title(sprintf('(c) 横梁偏角响应 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Northeast', 'FontSize', 7.5);
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('横梁偏角 \alpha (mrad)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(c) 偏转角', 'FontSize', 11, 'FontWeight', 'bold');
     
-    % (d) 右电机电流指令响应
-    subplot(2, 2, 4); hold on; grid on; box on;
-    yline( Imax_val, 'r:', 'LineWidth', 1.3, 'DisplayName', sprintf('+I_{max} (%.0f)', Imax_val));
-    yline(-Imax_val, 'r:', 'LineWidth', 1.3, 'DisplayName', sprintf('-I_{max} (-%.0f)', Imax_val));
+    % (d) 右电机电流
+    ax_d = axes('Position', [0.56, 0.14, 0.40, 0.30]); hold on; grid on; box on;
+    yline(Imax_val, 'r:', 'LineWidth', 1.2, 'HandleVisibility', 'off');
+    yline(-Imax_val, 'r:', 'LineWidth', 1.2, 'HandleVisibility', 'off');
     for c_id = 1:6
         res_curr = results_recip(idx_offset + c_id);
         plot(res_curr.t, res_curr.iR_cmd, 'Color', res_curr.color, 'LineStyle', res_curr.line_style, ...
-             'LineWidth', res_curr.line_width, 'DisplayName', sprintf('%s 指令', res_curr.ctrl_name));
+             'LineWidth', res_curr.line_width);
     end
-    xlabel('时间 t (s)'); ylabel('右电机电流指令 (counts)');
-    title(sprintf('(d) 右电机电流指令全周期响应 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Southeast', 'FontSize', 7);
-    
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('右电机电流指令 (counts)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(d) 右电机电流', 'FontSize', 11, 'FontWeight', 'bold');
+
+    % 全图底部统一共享图例 (4列2行，共8项，列优先交替保证行读顺序: Row1: y_d, C0, C1, C2a-IL; Row2: C2a-SA, C2b-IL, C2b-SA, \pm Imax)
+    ax_dummy = axes('Position', [0.10, 0.012, 0.80, 0.055], 'Visible', 'off');
+    hold(ax_dummy, 'on');
+    hLeg = gobjects(1, 8);
+    % Col 1: y_d (row 1), C2a-SA (row 2)
+    hLeg(1) = plot(ax_dummy, nan, nan, 'k:', 'LineWidth', 1.6);
+    hLeg(2) = plot(ax_dummy, nan, nan, 'Color', results_recip(idx_offset + 4).color, ...
+        'LineStyle', results_recip(idx_offset + 4).line_style, 'LineWidth', results_recip(idx_offset + 4).line_width);
+    % Col 2: C0 (row 1), C2b-IL (row 2)
+    hLeg(3) = plot(ax_dummy, nan, nan, 'Color', results_recip(idx_offset + 1).color, ...
+        'LineStyle', results_recip(idx_offset + 1).line_style, 'LineWidth', results_recip(idx_offset + 1).line_width);
+    hLeg(4) = plot(ax_dummy, nan, nan, 'Color', results_recip(idx_offset + 5).color, ...
+        'LineStyle', results_recip(idx_offset + 5).line_style, 'LineWidth', results_recip(idx_offset + 5).line_width);
+    % Col 3: C1 (row 1), C2b-SA (row 2)
+    hLeg(5) = plot(ax_dummy, nan, nan, 'Color', results_recip(idx_offset + 2).color, ...
+        'LineStyle', results_recip(idx_offset + 2).line_style, 'LineWidth', results_recip(idx_offset + 2).line_width);
+    hLeg(6) = plot(ax_dummy, nan, nan, 'Color', results_recip(idx_offset + 6).color, ...
+        'LineStyle', results_recip(idx_offset + 6).line_style, 'LineWidth', results_recip(idx_offset + 6).line_width);
+    % Col 4: C2a-IL (row 1), \pm Imax (row 2)
+    hLeg(7) = plot(ax_dummy, nan, nan, 'Color', results_recip(idx_offset + 3).color, ...
+        'LineStyle', results_recip(idx_offset + 3).line_style, 'LineWidth', results_recip(idx_offset + 3).line_width);
+    hLeg(8) = plot(ax_dummy, nan, nan, 'r:', 'LineWidth', 1.2);
+
+    legend_matrix_labels = { ...
+        '期望轨迹 y_d', 'C2a-SA', ...
+        'C0', 'C2b-IL', ...
+        'C1', 'C2b-SA', ...
+        'C2a-IL', '\pm I_{max}'};
+
+    lgd = legend(ax_dummy, hLeg, legend_matrix_labels, ...
+           'NumColumns', 4, ...
+           'FontSize', 8.5);
+    set(lgd, 'Position', [0.10, 0.012, 0.80, 0.062], 'Units', 'normalized');
+
+    sgtitle(sprintf('六控制器往复循迹性能对比 (I_{max} = %.0f counts)', Imax_val), ...
+        'FontSize', 12, 'FontWeight', 'bold');
+
     img_name = sprintf('benchmark_reciprocating_Imax%.0f.png', Imax_val);
-    saveas(fig, img_name);
-    fprintf('[OK] 往复对比图表已保存为 %s\n', img_name);
+    pdf_name = sprintf('benchmark_reciprocating_Imax%.0f.pdf', Imax_val);
+    exportgraphics(fig, img_name, 'Resolution', 300);
+    exportgraphics(fig, pdf_name, 'ContentType', 'vector');
+    close(fig);
+
+    doc_fig_dir = fullfile(pwd, '..', 'docs', 'figures');
+    if exist(doc_fig_dir, 'dir')
+        copyfile(img_name, fullfile(doc_fig_dir, img_name));
+        copyfile(pdf_name, fullfile(doc_fig_dir, pdf_name));
+    end
+    fprintf('[OK] 往复对比图表已保存为 %s 及 %s (并已同步归档到 docs/figures)\n', img_name, pdf_name);
 end
 
 %% 辅助函数

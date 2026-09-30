@@ -23,6 +23,7 @@ if ~exist('is_test_runner', 'var')
 end
 
 %% 1. 参数加载与测试轨迹生成
+addpath(fullfile(pwd, '..', 'common'));
 addpath(fullfile(pwd, '..', 'step1_baseline_c0'));
 [ctrl, mech, plant] = param_init();
 
@@ -448,69 +449,191 @@ end
 fprintf('========================================================================================================================================================================\n\n');
 
 %% 7. 绘制两套独立的五控制器对比图 (工况1: Imax=16000 与 工况2: Imax=4500)
-line_styles = {'-', '-', '--', '-', '-'};
-line_widths = [1.3, 1.3, 1.2, 1.4, 1.5];
+set(groot, ...
+    'defaultAxesFontName', 'Microsoft YaHei', ...
+    'defaultTextFontName', 'Microsoft YaHei', ...
+    'defaultLegendFontName', 'Microsoft YaHei');
+
+% 统一黑白与彩色均可明显区分的线型与线宽
+plot_styles = {'-', '-.', ':', '--', '-'};
+plot_widths = [1.3, 1.3, 1.5, 1.4, 1.8];
+plot_colors = {[0.0, 0.45, 0.74], ...      % 经典蓝 (C0)
+               [0.85, 0.33, 0.10], ...      % 活力橙 (C1)
+               [0.64, 0.08, 0.18], ...      % 深红 (C2a-noFF)
+               [0.47, 0.67, 0.19], ...      % 草绿 (C2a)
+               [0.49, 0.18, 0.56]};        % 紫罗兰 (C2b)
 
 for g_idx = 1:2
     Imax_val = groups(g_idx).Imax;
-    fig = figure('Color', 'w', 'Position', [80, 80, 1200, 780]);
+    fig = figure('Color', 'w', 'Position', [80, 80, 1400, 900], 'Visible', 'off');
     idx_offset = (g_idx - 1) * 5;
     
-    % (a) 质心平动位移
-    subplot(2, 2, 1); hold on; grid on; box on;
-    plot(traj.t, traj.y, 'k:', 'LineWidth', 1.6, 'DisplayName', '期望轨迹 y_d');
+    % (a) 位移响应 - 统一坐标尺度
+    ax_a = axes('Position', [0.08, 0.56, 0.40, 0.31]); hold on; grid on; box on;
+    plot(traj.t, traj.y, 'k:', 'LineWidth', 1.6);
     for c_id = 1:5
         res_curr = results_bench(idx_offset + c_id);
-        plot(res_curr.t, res_curr.yG, 'Color', res_curr.color, 'LineStyle', line_styles{c_id}, ...
-            'LineWidth', line_widths(c_id), 'DisplayName', res_curr.ctrl_name);
+        plot(res_curr.t, res_curr.yG, 'Color', plot_colors{c_id}, 'LineStyle', plot_styles{c_id}, ...
+            'LineWidth', plot_widths(c_id));
     end
-    xlabel('时间 t (s)'); ylabel('质心位移 y_G (m)');
-    title(sprintf('(a) 质心平动轨迹跟踪 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Southeast', 'FontSize', 8);
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('质心位移 y_G (m)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(a) 位移响应', 'FontSize', 11, 'FontWeight', 'bold');
+    xlim([0, 3.5]);
+    ylim([-0.05, 1.10]);
     
-    % (b) 左右同步误差
-    subplot(2, 2, 2); hold on; grid on; box on;
+    % (b) 同步误差 - 统一坐标尺度
+    ax_b = axes('Position', [0.56, 0.56, 0.40, 0.31]); hold on; grid on; box on;
     for c_id = 1:5
         res_curr = results_bench(idx_offset + c_id);
-        plot(res_curr.t, res_curr.esync, 'Color', res_curr.color, 'LineStyle', line_styles{c_id}, ...
-            'LineWidth', line_widths(c_id), 'DisplayName', res_curr.ctrl_name);
+        plot(res_curr.t, res_curr.esync, 'Color', plot_colors{c_id}, 'LineStyle', plot_styles{c_id}, ...
+            'LineWidth', plot_widths(c_id));
     end
-    xlabel('时间 t (s)'); ylabel('同步误差 y_R - y_L (mm)');
-    title(sprintf('(b) 左右同步误差对比 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Northeast', 'FontSize', 8);
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('同步误差 y_R - y_L (mm)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(b) 同步误差', 'FontSize', 11, 'FontWeight', 'bold');
+    xlim([0, 3.5]);
+    ylim([-1.40, 0.30]);
     
-    % (c) 横梁偏转偏角 alpha
-    subplot(2, 2, 3); hold on; grid on; box on;
+    % (c) 偏转角 - 统一坐标尺度
+    ax_c = axes('Position', [0.08, 0.14, 0.40, 0.30]); hold on; grid on; box on;
     for c_id = 1:5
         res_curr = results_bench(idx_offset + c_id);
-        plot(res_curr.t, res_curr.alpha * 1e3, 'Color', res_curr.color, 'LineStyle', line_styles{c_id}, ...
-            'LineWidth', line_widths(c_id), 'DisplayName', res_curr.ctrl_name);
+        plot(res_curr.t, res_curr.alpha * 1e3, 'Color', plot_colors{c_id}, 'LineStyle', plot_styles{c_id}, ...
+            'LineWidth', plot_widths(c_id));
     end
-    xlabel('时间 t (s)'); ylabel('横梁偏角 \alpha (mrad)');
-    title(sprintf('(c) 横梁偏角响应 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Northeast', 'FontSize', 8);
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('横梁偏角 \alpha (mrad)', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(c) 偏转角', 'FontSize', 11, 'FontWeight', 'bold');
+    xlim([0, 3.5]);
+    ylim([-2.40, 0.40]);
     
-    % (d) 右电机指令响应与限幅削顶
-    subplot(2, 2, 4); hold on; grid on; box on;
-    yline(-Imax_val, 'r:', 'LineWidth', 1.4, 'DisplayName', sprintf('硬件上限 -%.0f', Imax_val));
+    % (d) 归一化右电机电流 (iR / Imax, 限幅 -1)
+    ax_d = axes('Position', [0.56, 0.14, 0.40, 0.30]); hold on; grid on; box on;
+    yline(-1.0, 'r:', 'LineWidth', 1.2, 'HandleVisibility', 'off');
     for c_id = 1:5
         res_curr = results_bench(idx_offset + c_id);
-        plot(res_curr.t, res_curr.iR_cmd, 'Color', res_curr.color, 'LineStyle', line_styles{c_id}, ...
-             'LineWidth', line_widths(c_id), 'DisplayName', sprintf('%s 指令', res_curr.ctrl_name));
-        % 针对强限流工况，叠加画出 C2a 与 C2b 的未限幅理想请求虚线
-        if g_idx == 2 && (c_id == 4 || c_id == 5)
-            plot(res_curr.t, res_curr.iR_ideal, 'Color', res_curr.color, 'LineStyle', ':', 'LineWidth', 1.1, ...
-                 'DisplayName', sprintf('%s 理想请求', res_curr.ctrl_name));
-        end
+        plot(res_curr.t, res_curr.iR_cmd / Imax_val, 'Color', plot_colors{c_id}, ...
+            'LineStyle', plot_styles{c_id}, 'LineWidth', plot_widths(c_id));
     end
-    xlabel('时间 t (s)'); ylabel('右电机电流指令 (counts)');
-    title(sprintf('(d) 右电机指令响应与削顶缺额 (I_{max}=%.0f)', Imax_val));
-    legend('Location', 'Southeast', 'FontSize', 7);
-    
+    xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+    ylabel('归一化电流 i_R / I_{max}', 'FontSize', 10, 'FontWeight', 'bold');
+    title('(d) 归一化右电机电流', 'FontSize', 11, 'FontWeight', 'bold');
+    xlim([0, 3.5]);
+    ylim([-1.15, 0.35]);
+
+    % 全图底部统一共享图例 (4列2行，共7项，列优先交替排列: Row1: y_d, C0, C1, 负向限幅 -1; Row2: C2a-noFF, C2a, C2b)
+    ax_dummy = axes('Position', [0.10, 0.012, 0.80, 0.055], 'Visible', 'off');
+    hold(ax_dummy, 'on');
+    hLeg = gobjects(1, 7);
+    % Col 1: y_d (row 1), C2a-noFF (row 2)
+    hLeg(1) = plot(ax_dummy, nan, nan, 'k:', 'LineWidth', 1.6);
+    hLeg(2) = plot(ax_dummy, nan, nan, 'Color', plot_colors{3}, 'LineStyle', plot_styles{3}, 'LineWidth', plot_widths(3));
+    % Col 2: C0 (row 1), C2a (row 2)
+    hLeg(3) = plot(ax_dummy, nan, nan, 'Color', plot_colors{1}, 'LineStyle', plot_styles{1}, 'LineWidth', plot_widths(1));
+    hLeg(4) = plot(ax_dummy, nan, nan, 'Color', plot_colors{4}, 'LineStyle', plot_styles{4}, 'LineWidth', plot_widths(4));
+    % Col 3: C1 (row 1), C2b (row 2)
+    hLeg(5) = plot(ax_dummy, nan, nan, 'Color', plot_colors{2}, 'LineStyle', plot_styles{2}, 'LineWidth', plot_widths(2));
+    hLeg(6) = plot(ax_dummy, nan, nan, 'Color', plot_colors{5}, 'LineStyle', plot_styles{5}, 'LineWidth', plot_widths(5));
+    % Col 4: 负向限幅 -1 (row 1)
+    hLeg(7) = plot(ax_dummy, nan, nan, 'r:', 'LineWidth', 1.2);
+
+    legend_matrix_labels = { ...
+        '期望轨迹 y_d', 'C2a-noFF', ...
+        'C0', 'C2a', ...
+        'C1', 'C2b', ...
+        '负向限幅 -1'};
+
+    lgd = legend(ax_dummy, hLeg, legend_matrix_labels, ...
+           'NumColumns', 4, ...
+           'FontSize', 8.5);
+    set(lgd, 'Position', [0.10, 0.012, 0.80, 0.055], 'Units', 'normalized');
+
+    sgtitle(sprintf('五控制器单程循迹对比 (I_{max} = %.0f counts)', Imax_val), ...
+        'FontSize', 12, 'FontWeight', 'bold');
+
     img_name = sprintf('benchmark_c0_c1_c2a_Imax%.0f.png', Imax_val);
-    saveas(fig, img_name);
-    fprintf('[OK] 图表已保存为 %s\n', img_name);
+    pdf_name = sprintf('benchmark_c0_c1_c2a_Imax%.0f.pdf', Imax_val);
+    exportgraphics(fig, img_name, 'Resolution', 300);
+    exportgraphics(fig, pdf_name, 'ContentType', 'vector');
+    close(fig);
+
+    doc_fig_dir = fullfile(pwd, '..', 'docs', 'figures');
+    if exist(doc_fig_dir, 'dir')
+        copyfile(img_name, fullfile(doc_fig_dir, img_name));
+        copyfile(pdf_name, fullfile(doc_fig_dir, pdf_name));
+    end
+    fprintf('[OK] 五控制器对比图表已保存为 %s 及 %s (并已同步归档到 docs/figures)\n', img_name, pdf_name);
 end
+
+%% 8. 绘制独立的饱和与抗饱和削顶缺额对比图 (Imax=4500)
+fprintf('>>> 正在绘制饱和削顶缺额对比学术图表: benchmark_c2_saturation_deficit_Imax4500.png ...\n');
+res_c2a = results_bench(5 + 4);
+res_c2b = results_bench(5 + 5);
+
+% 计算未实现量幅值与统计指标 (避免硬编码)
+delta_i_c2a_signed = res_c2a.iR_ideal - res_c2a.iR_cmd;
+delta_i_c2b_signed = res_c2b.iR_ideal - res_c2b.iR_cmd;
+delta_i_c2a_abs = abs(delta_i_c2a_signed);
+delta_i_c2b_abs = abs(delta_i_c2b_signed);
+
+D_c2a = max(delta_i_c2a_abs);
+D_c2b = max(delta_i_c2b_abs);
+reduction = 100 * (1 - D_c2b / D_c2a);
+
+fig_sat = figure('Color', 'w', 'Position', [100, 100, 1100, 800], 'Visible', 'off');
+sgtitle('强限流饱和与动态抗饱和削顶缺额对比 (I_{max} = 4500 counts)', ...
+    'FontSize', 12, 'FontWeight', 'bold');
+
+% 顶部图外统一共享图例 (避免遮挡曲线与版面割裂)
+ax_leg = axes('Position', [0.08, 0.885, 0.84, 0.045], 'Visible', 'off');
+hold(ax_leg, 'on');
+hLeg_sat = gobjects(1, 3);
+hLeg_sat(1) = plot(ax_leg, nan, nan, 'Color', plot_colors{4}, 'LineStyle', plot_styles{4}, 'LineWidth', plot_widths(4));
+hLeg_sat(2) = plot(ax_leg, nan, nan, 'Color', plot_colors{5}, 'LineStyle', plot_styles{5}, 'LineWidth', plot_widths(5));
+hLeg_sat(3) = plot(ax_leg, nan, nan, 'r:', 'LineWidth', 1.2);
+lgd_sat = legend(ax_leg, hLeg_sat, { ...
+    sprintf('C2a: 无抗饱和 (D_{max}=%.0f counts)', D_c2a), ...
+    sprintf('C2b: 动态抗饱和 (D_{max}=%.0f counts, 降幅 %.1f%%)', D_c2b, reduction), ...
+    '负向限幅 -I_{max} (-4500 counts)'}, ...
+    'NumColumns', 3, 'FontSize', 9);
+set(lgd_sat, 'Position', [0.08, 0.885, 0.84, 0.045], 'Units', 'normalized');
+
+% (a) 实际施加电流指令
+ax_s1 = axes('Position', [0.10, 0.515, 0.84, 0.33]); hold on; grid on; box on;
+yline(-4500, 'r:', 'LineWidth', 1.2, 'HandleVisibility', 'off');
+plot(res_c2a.t, res_c2a.iR_cmd, 'Color', plot_colors{4}, 'LineStyle', plot_styles{4}, ...
+    'LineWidth', plot_widths(4));
+plot(res_c2b.t, res_c2b.iR_cmd, 'Color', plot_colors{5}, 'LineStyle', plot_styles{5}, ...
+    'LineWidth', plot_widths(5));
+xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+ylabel('实际电流指令 i_{R,cmd} (counts)', 'FontSize', 10, 'FontWeight', 'bold');
+title('(a) 右电机实际施加电流指令 i_{R,cmd}', 'FontSize', 11, 'FontWeight', 'bold');
+ylim([-5000, 1000]);
+xlim([0, 3.5]);
+
+% (b) 饱和请求未实现量幅值 |Delta i_R| = |i_ideal - i_cmd|
+ax_s2 = axes('Position', [0.10, 0.095, 0.84, 0.33]); hold on; grid on; box on;
+plot(res_c2a.t, delta_i_c2a_abs, 'Color', plot_colors{4}, 'LineStyle', plot_styles{4}, ...
+    'LineWidth', plot_widths(4));
+plot(res_c2b.t, delta_i_c2b_abs, 'Color', plot_colors{5}, 'LineStyle', plot_styles{5}, ...
+    'LineWidth', plot_widths(5));
+xlabel('时间 t (s)', 'FontSize', 10, 'FontWeight', 'bold');
+ylabel('| \Delta i_R | (counts)', 'FontSize', 10, 'FontWeight', 'bold');
+title('(b) 饱和请求未实现量幅值 | \Delta i_R | = | i_{R,ideal} - i_{R,cmd} |', 'FontSize', 11, 'FontWeight', 'bold');
+xlim([0, 3.5]);
+
+img_sat = 'benchmark_c2_saturation_deficit_Imax4500.png';
+pdf_sat = 'benchmark_c2_saturation_deficit_Imax4500.pdf';
+exportgraphics(fig_sat, img_sat, 'Resolution', 300);
+exportgraphics(fig_sat, pdf_sat, 'ContentType', 'vector');
+close(fig_sat);
+
+if exist(doc_fig_dir, 'dir')
+    copyfile(img_sat, fullfile(doc_fig_dir, img_sat));
+    copyfile(pdf_sat, fullfile(doc_fig_dir, pdf_sat));
+end
+fprintf('[OK] 饱和缺额对比图表已保存为 %s 及 %s (并已同步归档到 docs/figures)\n', img_sat, pdf_sat);
 
 %% 辅助函数: 初始化 PID 结构体
 function s = init_pid_struct(kp, ki, kd, max_out, max_iout)
