@@ -80,9 +80,11 @@
    - 输出数据文件 `sensitivity_results.mat` 与 `sensitivity_summary.csv`；按当前网格应生成 113 条数据记录（不含表头）。
 2. **绘图输出**：
    - `sensitivity_eccentric_load.png`（维度 1 曲线）
-   - `sensitivity_asymmetry.png`（维度 2 与维度 4 合并曲线）
+   - `sensitivity_friction_asymmetry.png`（维度 2：导轨摩擦非对称曲线）
+   - `sensitivity_thrust_asymmetry.png`（维度 4A/4B：推力增益非对称曲线，含 Oracle 对照）
    - `sensitivity_Imax_escalation.png`（维度 3 曲线）
-   - `sensitivity_kaw_and_load_transfer.png`（维度 5 与维度 6 合并曲线）
+   - `sensitivity_antiwindup_params.png`（维度 5：抗饱和参数敏感性曲线）
+   - `sensitivity_load_transfer.png`（维度 6：往返分段载荷时域曲线）
 3. **正式技术报告**：`output/step2_advanced_controllers/STEP2_6_SENSITIVITY_REPORT.md`
    - 全面收录数据表格与物理分析；
    - 严谨总结 SyncAlloc 的有效适用区间与平动代价规律。

@@ -150,7 +150,7 @@ $$W_0(s) = \frac{\omega_n^4}{\Lambda(s)}, \quad W_1(s) = \frac{\omega_n^4 s}{\La
 > **平稳性与一致性说明**：自适应参数注入名义前馈矩阵时，位移跟踪误差平滑收敛，电流指令严格钳位于硬限幅，控制动作总变差比值 $\text{TV}_{\text{ratio}} = 1.022 \le 1.10$。在排除换向加速度跳变及其过渡段 $\pm 100\text{ ms}$ 后，平滑段单步最大电流增量比为 $1.000 \le 1.05$（实测均为 $167.79\text{ counts}$，RMS 仅 $9.85$ vs $9.91\text{ counts}$，在排除过渡段后所选平滑时域指标未发现异常高频尖峰；换向点突变比值 $1.407 \approx 17.6/12.44$ 由梯形加速度阶跃前馈比例决定）。完全对称工况（$d=0, \delta_{\text{fric}}=0$）下偏转角恒为零，严格作为对称模型一致性检查。
 
 #### 图 3: 往复换向载荷突变与抗饱和动态对比
-![往复载荷突变轨迹](docs/figures/sensitivity_kaw_and_load_transfer.png)
+![往复载荷突变轨迹](docs/figures/sensitivity_load_transfer.png)
 
 ---
 

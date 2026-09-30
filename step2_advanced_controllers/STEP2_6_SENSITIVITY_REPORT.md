@@ -52,7 +52,7 @@
 
 **物理机理分析**：
 1. **同步抑制效能**：当偏载质量 $\Delta m$ 由 $0.0 \to 6.0\text{ kg}$ 递增时，独立截断的同步误差由 $0.6548\text{ mm}$ 增至 $1.0752\text{ mm}$；SyncAlloc 保持纠偏物理力矩缺额 $\Delta T_\alpha \equiv 0$，同步误差仅由 $0.2725\text{ mm}$ 缓升至 $0.3857\text{ mm}$，在此扫描区间内改善幅度为 **$58.4\% \sim 64.1\%$**。
-2. **平动让步代价**：同步误差的降低以平动推进力为让步代价，质心跟踪误差 $\text{RMSE}_{yG}$ 在各点均增大约 $36.7\%$（从约 $109\text{ mm}$ 增至 $149\text{ mm}$）。
+2. **平动让步代价**：同步误差的降低以平动推进力为让步代价。相对于对应的独立截断基线，质心跟踪误差 $\text{RMSE}_{yG}$ 在该扫描范围内增加约 $37\sim44\text{ mm}$（例如 $\Delta m=0$ 时为 $138.61-101.28=37.33\text{ mm}$，$\Delta m=6\text{ kg}$ 时为 $162.13-118.67=43.46\text{ mm}$）。
 3. **抗饱和积分消减**：动态抗饱和状态 $\mathbf{z}_{\text{aw}}$ 有效吸收了未实现的虚拟平动力，使总不可实现残差积分相对 C2a-SyncAlloc 降低约 **$50.0\%$**。
 
 ---
@@ -246,21 +246,22 @@ $$K_{f,L} = \frac{2 K_{f,\text{mean}} \cdot r}{1 + r}, \quad K_{f,R} = \frac{2 K
    - (b) 质心跟踪 RMSE 随偏载质量变化曲线（平动让步代价）；
    - (c) 峰值同步误差随偏心距变化曲线 ($0.00 \sim 0.30\text{ m}$)；
    - (d) 质心跟踪 RMSE 随偏心距变化曲线。
-2. [sensitivity_asymmetry.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_asymmetry.png)：
+2. [sensitivity_friction_asymmetry.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_friction_asymmetry.png)：
    - (a) 导轨摩擦偏差对同步误差的影响；
-   - (b) 双电机控制量总变差随摩擦偏差演化；
-   - (c) 推力增益非对称扫描（4A 失配退化 vs 4B 已知校准 oracle 对照）；
-   - (d) 真实物理力矩缺额 $\Delta T_{\alpha,\text{phys}}$ 对比曲线。
-3. [sensitivity_Imax_escalation.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_Imax_escalation.png)：
+   - (b) 双电机控制量总变差随摩擦偏差演化。
+3. [sensitivity_thrust_asymmetry.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_thrust_asymmetry.png)：
+   - 推力增益非对称扫描（4A 失配退化 vs 4B 已知真实增益映射的 Oracle 对照）；
+   - 注：Oracle 仅指数值仿真中直接使用真实推力增益的理想参考，不代表已完成在线辨识、离线标定或硬件实验。
+4. [sensitivity_Imax_escalation.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_Imax_escalation.png)：
    - (a) 同步误差随电流限幅相变曲线（标注 ~8000 临界分水岭）；
    - (b) 同步改善比率演化；
    - (c) 质心跟踪误差演化；
    - (d) 总不可实现请求积分演化。
-4. [sensitivity_kaw_and_load_transfer.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_kaw_and_load_transfer.png)：
+5. [sensitivity_antiwindup_params.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_antiwindup_params.png)：
    - (a) 抗饱和增益 $K_{\text{aw}}$ 响应特性（含 $K_{\text{aw}}=0$ 基准）；
    - (b) 抗饱和衰减率 $\lambda_{\text{aw}}$ 响应特性；
-   - (c) 往返分段载荷位移跟踪时域轨迹（清晰标注 3.3s 切换与 3.5s 返程）；
-   - (d) 往返分段载荷同步误差时域响应。
+6. [sensitivity_load_transfer.png](file:///c:/Users/Lenovo/Desktop/论文/早期/论文/起重机/output/step2_advanced_controllers/sensitivity_load_transfer.png)：
+   - 往返分段载荷位移跟踪与同步误差时域响应，标注 $t=3.3\text{ s}$ 载荷切换和 $t=3.5\text{ s}$ 返程启动。
 
 ---
 

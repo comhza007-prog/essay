@@ -218,14 +218,20 @@
 #### (1) 偏载质量与偏心距敏感性曲线群 (维度 1A & 1B)
 ![偏载敏感性曲线群](./figures/sensitivity_eccentric_load.png)
 
-#### (2) 摩擦与推力非对称性响应 (维度 2, 4A & 4B)
-![摩擦与推力非对称响应](./figures/sensitivity_asymmetry.png)
+#### (2) 导轨摩擦非对称响应 (维度 2)
+![导轨摩擦非对称响应](./figures/sensitivity_friction_asymmetry.png)
 
-#### (3) 电流限幅分级相变分析 (维度 3)
+#### (3) 执行器推力增益非对称响应 (维度 4A & 4B)
+![推力增益非对称响应](./figures/sensitivity_thrust_asymmetry.png)
+
+#### (4) 电流限幅分级相变分析 (维度 3)
 ![限流分级相变分析](./figures/sensitivity_Imax_escalation.png)
 
-#### (4) 抗饱和参数网格与往返载荷突变轨迹 (维度 5 & 维度 6)
-![抗饱和参数与载荷突变轨迹](./figures/sensitivity_kaw_and_load_transfer.png)
+#### (5) 抗饱和参数敏感性 (维度 5)
+![抗饱和参数敏感性](./figures/sensitivity_antiwindup_params.png)
+
+#### (6) 往返载荷突变轨迹 (维度 6)
+![往返载荷突变轨迹](./figures/sensitivity_load_transfer.png)
 
 ## 九、学术边界与严谨声明
 
