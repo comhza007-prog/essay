@@ -291,7 +291,6 @@ ylabel('控制量总变差 TV_{total}', 'FontSize', 10, 'FontWeight', 'bold');
 title('(b) K_{aw} 对 TV_{total} 的影响', 'FontSize', 11, 'FontWeight', 'bold');
 xlim([-2, 82]);
 ylim([3.0e4, 4.0e4]); % 与子图 (d) 统一纵轴基准，直观呈现变差恒定，消除双轴误导
-text(8, 3.25e4, 'TV_{total} \approx 3.055 \times 10^4 (相对变化 < 0.002%)', 'FontSize', 9, 'Color', [0.7, 0.1, 0.1], 'FontWeight', 'bold');
 
 % (c) lambda_aw 对不可实现请求积分的影响
 ax_aw3 = axes('Position', [0.09, 0.14, 0.39, 0.32]); hold on; grid on; box on;
@@ -351,8 +350,8 @@ t_vec = traj.t;
 ax_lt1 = axes('Position', [0.09, 0.56, 0.86, 0.34]); hold on; grid on; box on;
 xline(3.3, 'Color', [0.8, 0.2, 0.8], 'LineStyle', ':', 'LineWidth', 1.4, 'HandleVisibility', 'off');
 xline(3.5, 'Color', [0.3, 0.3, 0.3], 'LineStyle', '--', 'LineWidth', 1.3, 'HandleVisibility', 'off');
-text(3.28, 1.10, '载荷突变 4.5kg\rightarrow0.5kg (3.3 s)', 'FontSize', 9, 'Color', [0.6, 0.1, 0.6], 'FontWeight', 'bold', 'HorizontalAlignment', 'right');
-text(3.55, 1.10, '返程启动 (3.5 s)', 'FontSize', 9, 'Color', [0.2, 0.2, 0.2], 'FontWeight', 'bold', 'HorizontalAlignment', 'left');
+text(3.28, 1.10, '载荷突变: 4.5 kg \rightarrow 0.5 kg, t = 3.3 s', 'FontSize', 9, 'Color', [0.6, 0.1, 0.6], 'FontWeight', 'bold', 'HorizontalAlignment', 'right');
+text(3.55, 1.10, '返程启动: t = 3.5 s', 'FontSize', 9, 'Color', [0.2, 0.2, 0.2], 'FontWeight', 'bold', 'HorizontalAlignment', 'left');
 
 % 期望轨迹
 plot(t_vec, traj.y, 'k:', 'LineWidth', 1.6, 'HandleVisibility', 'off'); % 轨迹参考线
