@@ -61,6 +61,12 @@
 │   ├── run_step3a_benchmark.m         # Step 3A 辨识与闭环基准测试及图表生成脚本
 │   └── step3a_metrics_summary.csv     # Step 3A 辨识精度与控制平稳性指标汇总
 │
+├── step4_hardware_experiments/        # 第四阶段：实物台架实验与正式封档
+│   ├── archives/                      # 实验一、实验二完整封档 ZIP 及 SHA-256
+│   ├── results/                       # 实验说明、统计工作簿和论文图
+│   ├── signal_dictionary.csv          # 实物日志信号字典
+│   └── trial_manifest_template.csv    # 后续试验清单模板
+│
 ├── docs/                              # 技术文档、推导备忘录与学术图表
 │   ├── figures/                       # 高分辨率论文图表 (PNG, 300 DPI)
 │   ├── PROJECT_WALKTHROUGH.md         # 涵盖 Step 1~3A 的全局技术实现与深度分析报告
@@ -203,7 +209,7 @@ run('step3_adaptive_rls/run_step3a_benchmark.m');
 ## 六、学术边界与严谨声明
 
 1. **数值仿真与实物台架严格界定**：
-   本项目所有数据、曲线与指标均基于由实际比赛电机与机械资料参数建立的二自由度非线性动力学模型进行的离散数值仿真，**不代表物理台架或实车实验已经完成**。所有控制量与中间状态均为仿真环境下的数值记录。
+   Step 1–3 的数据、曲线与指标均来自二自由度非线性动力学模型的离散数值仿真；Step 4 的实验一空载往返和实验二 2 kg 载荷突变为独立采集、独立统计并正式封档的实物台架数据。两类证据在目录、文件名和论文表述中严格分开，不能笼统混称为“实验数据”。
 2. **已知基准真值界定**：
    标称推力系数 $K_{f,\text{nom}} = 0.0061979\text{ N/count}$、横梁扭转刚度 $K_\alpha$ 与转动阻尼 $B_\alpha$ 明确界定为数值仿真阶段使用的基准真值。
 3. **Phase 2 (Step 3B) 阶段隔离承诺**：
