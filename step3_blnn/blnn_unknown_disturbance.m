@@ -1,0 +1,26 @@
+function d = blnn_unknown_disturbance(x, env)
+%BLNN_UNKNOWN_DISTURBANCE Deterministic state-dependent unmodeled dynamics.
+%   This term is deliberately excluded from the nominal controller model.
+%   It represents nonlinear guide friction, load-dependent force ripple,
+%   and cross-axis moment disturbance. It contains no random component.
+
+    y = x(1);
+    alpha = x(2);
+    y_dot = x(3);
+    alpha_dot = x(4);
+
+    scale = env.disturbance_scale;
+    d_force = scale * ( ...
+        7.0 * sin(5.0 * y) + ...
+        4.0 * tanh(7.0 * y_dot) + ...
+        1.5 * y_dot * abs(y_dot) + ...
+        1.0 * sin(35.0 * alpha));
+
+    d_moment = scale * ( ...
+        0.80 * sin(4.0 * y) + ...
+        0.45 * tanh(8.0 * y_dot) + ...
+        0.25 * tanh(18.0 * alpha_dot) + ...
+        0.15 * sin(45.0 * alpha));
+
+    d = [d_force; d_moment];
+end

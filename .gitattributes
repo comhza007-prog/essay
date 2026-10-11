@@ -1,2 +1,17 @@
 step4_hardware_experiments/archives/experiment3_full_archive_20261003.zip filter=lfs diff=lfs merge=lfs -text
 step4_hardware_experiments/archives/experiment4_full_archive_20261003.zip filter=lfs diff=lfs merge=lfs -text
+
+# Preserve snapshot SHA256 values on every platform (no newline conversion).
+/BLNN完整复现与论文收尾执行规划.md -text
+/step1_baseline_c0/** -text
+/step2_advanced_controllers/** -text
+/step3_adaptive_rls/** -text
+/step3_blnn/** -text
+/实验5整理_20261011/** -text
+/实验5整理_20261011.zip -text
+
+# Large simulation time-series files; download with git lfs pull.
+step3_blnn/m3508_integration/results_ablation_v3/ablation.mat filter=lfs diff=lfs merge=lfs -text
+step3_blnn/m3508_integration/results_holdout_v3/holdout.mat filter=lfs diff=lfs merge=lfs -text
+step3_blnn/m3508_integration/results_robustness_v2/robustness.mat filter=lfs diff=lfs merge=lfs -text
+step3_blnn/m3508_integration/results_sensitivity_v3/sensitivity.mat filter=lfs diff=lfs merge=lfs -text

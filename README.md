@@ -2,10 +2,28 @@
 # Adaptive Synchronization Control with Actuator Saturation & Online Parameter Identification for Dual-Drive Gantry Systems
 
 [![MATLAB](https://img.shields.io/badge/Platform-MATLAB%20R2020a%2B-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Verification](https://img.shields.io/badge/Unit%20Tests-19%2F19%20PASS-brightgreen.svg)](#单元测试与验证体系)
+[![Verification](https://img.shields.io/badge/Unit%20Tests-26%2F26%20PASS-brightgreen.svg)](#单元测试与验证体系)
 [![License](https://img.shields.io/badge/License-Academic%20Use%20Only-orange.svg)](#学术规范与使用声明)
 
-本项目面向双驱龙门架机械系统（基于大疆 RoboMaster M3508 直流无刷减速电机齿轮齿条对向安装构型、8192 线高精度光电编码器），针对系统运行中的**偏载惯性耦合、左右导轨摩擦非对称、执行器三级硬限幅与线圈饱和、以及运行中载荷质量突变与参数不确定性**，在经典文献（*Zhou et al., Nonlinear Dynamics, 2026*）控制框架的基础上进行了严谨复现与拓展研究，建立了包含基线对比、动态抗饱和协同分配、状态变量滤波（SVF）与递推最小二乘（RLS）在线参数辨识的完整研究代码库与实验基准。
+本项目面向双驱龙门架机械系统（基于大疆 RoboMaster M3508 直流无刷减速电机齿轮齿条对向安装构型、8192 线高精度光电编码器），针对系统运行中的**偏载惯性耦合、左右导轨摩擦非对称、执行器三级硬限幅与线圈饱和、以及运行中载荷质量突变与参数不确定性**，在经典文献（*Zhou et al., Nonlinear Dynamics, 2026*）控制框架的基础上开展复现与拓展研究。基线控制、动态抗饱和协同分配、SVF/RLS和四组实物实验已经形成独立模块；BLNN当前处于原文网络结构复现和M3508适配开发阶段，尚未完成原文C1复合控制器的一比一复现。
+
+---
+
+## 最新成果入口（2026-10-11）
+
+- **仿真**：[BLNN v3验证报告](step3_blnn/m3508_integration/V3_VALIDATION_REPORT.md)、[冻结协议](step3_blnn/m3508_integration/V3_FROZEN_PROTOCOL.md)及[快照源文件清单](step3_blnn/m3508_integration/V3_SNAPSHOT_CONTENTS.sha256)。已保存215组主批次时序/统计，其中两场景各20对独立样本；独立副本重跑187组核心仿真得到数值逐点一致。仿真是本平台候选验证，不是原文一比一完整复现或全局强饱和定理。
+- **新实物实验**：[实验5整理包说明](实验5整理_20261011/README.md)及[完整整理包ZIP](实验5整理_20261011.zip)。A/B两工况、BASE/BLNN/CA_BLNN三方法、每条件3次，共18个完整分析样本；保留23份正式原始CSV、精确行映射、Excel、4幅论文图、实验说明和六套冻结固件副本。
+- **证据边界**：普通BLNN在本批平均跟踪指标上更低，CA_BLNN并非所有指标最优；全部18次硬边界累计计数为0，因此本批不能单独证明强饱和条件下的实物优势。不能将仿真强饱和结论与短行程实物结果混写。原四组封档不修改。
+
+大型MAT时序使用Git LFS。完整下载后执行：
+
+```bash
+git lfs pull
+```
+
+仿真复现：在MATLAB R2024b中进入 `step3_blnn/m3508_integration`，运行 `resultRoot=reproduce_v3();`，需要Control System Toolbox，输出新目录不覆盖保存结果。实验复算见整理包 `06_复现脚本/reproduce.ps1`（本机运行库路径可另行指定）。本次上传不包含旧调试采集、重复干净副本、临时运行库或本地207.6 MiB仿真ZIP；该ZIP内的136个快照文件均按原路径提供，其中4个大型MAT使用LFS。
+
+下方BLNN开发版数值与7项检查属于历史开发基线；当前平台主线结论以上述v3报告与本次实物说明为准。
 
 ---
 
@@ -17,8 +35,9 @@
   - [2. 动态抗饱和与力矩优先协同分配 (Dynamic AW & SyncAlloc)](#2-动态抗饱和与力矩优先协同分配)
   - [3. 4 阶因果巴特沃斯 SVF 滤波与抗量化噪声 (SVF Filtering)](#3-4-阶因果巴特沃斯-svf-滤波与抗量化噪声)
   - [4. 滑动窗 Gram 矩阵持续激励门控 RLS (Supervisory RLS Identification)](#4-滑动窗-gram-矩阵持续激励门控-rls)
+  - [5. 原文结构 BLNN 与约束感知扩展](#5-原文结构-blnn-与约束感知扩展)
 - [三、基准性能汇总与控制效果对比](#三基准性能汇总与控制效果对比)
-- [四、单元测试与验证体系 (19/19 PASS)](#四单元测试与验证体系)
+- [四、程序级测试体系 (26/26 PASS)](#四程序级测试体系-2626-pass)
 - [五、快速复现指南 (Quick Start)](#五快速复现指南)
 - [六、学术边界与严谨声明](#六学术边界与严谨声明)
 
@@ -60,6 +79,14 @@
 │   ├── verify_step3a.m                # Step 3A 核心算法与闭环平稳性断言 (7/7 PASS)
 │   ├── run_step3a_benchmark.m         # Step 3A 辨识与闭环基准测试及图表生成脚本
 │   └── step3a_metrics_summary.csv     # Step 3A 辨识精度与控制平稳性指标汇总
+│
+├── step3_blnn/                        # 第三阶段补充：BLNN网络结构复现与约束感知开发版
+│   ├── nn_compensator_step.m          # 映射节点、增强节点、权值更新和节点增长
+│   ├── controller_c3b_nn_sync_alloc.m # BLNN与M3508抗饱和/同步分配复合控制器
+│   ├── run_blnn_benchmark.m           # 无网络、RBFNN、Paper-BLNN、CA-BLNN对比
+│   ├── verify_blnn.m                  # BLNN程序级开发检查（7/7 PASS）
+│   ├── audit/                         # 公式追踪、参数表和复现差距
+│   └── BLNN_SIMULATION_REPORT.md      # 初步仿真结果与论文表述边界
 │
 ├── step4_hardware_experiments/        # 第四阶段：实物台架实验与正式封档
 │   ├── archives/                      # 实验一、实验二完整封档 ZIP 及 SHA-256
@@ -126,6 +153,12 @@ $$W_0(s) = \frac{\omega_n^4}{\Lambda(s)}, \quad W_1(s) = \frac{\omega_n^4 s}{\La
    - 匀速段（$\ddot{y}=0$）与静止段绝对冻结参数与协方差矩阵；
 3. **安全闭环注入**：参数通过紧凑凸集物理投影 $\Omega_\theta$ 与单步速率限制器（$|\Delta \hat{M}| \le 0.010\text{ kg/ms} = 10\text{ kg/s}$），配合 $5\text{ Hz}$ 低通平滑后注入前馈名义模型矩阵。
 
+### 5. 原文结构 BLNN 与约束感知扩展
+
+当前BLNN模块实现了原文式（28）至式（34）的两个独立广义自由度网络、5维输入 $[\ddot q_i,\dot q_i,q_i,e_i,\dot e_i]^T$、高斯映射节点、$\cos(h)$/$\sin(h)$增强节点、在线泄漏权值更新和自适应节点增长。一般不确定性开发工况下，Paper-structure BLNN相对无网络基线将跟踪RMSE降低81.47%，同步RMS降低74.89%。原文八参数RLS、平滑饱和辅助项、原文基线和Set1至Set3仍在复现计划中。
+
+针对左右M3508硬限流，进一步增加约束感知门控：当名义控制请求缺少电流余量时，抑制神经补偿、学习和节点增长，避免将执行器能力不足学习成未知动力学。严重非对称限流下，原文结构BLNN出现权值风积，而CA-BLNN保持跟踪RMSE不劣于无网络基线并将同步RMS降低8.50%；但当前饱和占比仍未通过最终标准。完整边界与结果见 [BLNN开发报告](step3_blnn/BLNN_SIMULATION_REPORT.md)和[公式追踪矩阵](step3_blnn/audit/PAPER_EQUATION_TRACEABILITY.md)。
+
 ---
 
 ## 三、基准性能汇总与控制效果对比
@@ -160,7 +193,7 @@ $$W_0(s) = \frac{\omega_n^4}{\Lambda(s)}, \quad W_1(s) = \frac{\omega_n^4 s}{\La
 
 ---
 
-## 四、单元测试与验证体系 (19/19 PASS)
+## 四、程序级测试体系 (26/26 PASS)
 
 本项目构建了包含物理代数约束、极点稳定性、噪声抑制、PE 门控有效性与闭环稳定性在内的全面断言测试矩阵：
 
@@ -174,6 +207,10 @@ $$W_0(s) = \frac{\omega_n^4}{\Lambda(s)}, \quad W_1(s) = \frac{\omega_n^4 s}{\La
    - Test 5: 真实投影 RLS，内部原始状态 `theta_raw` 严格截断在物理边界内，单步最大增量严格截断在 $0.0100\text{ kg} \le 0.010\text{ kg/ms}$；
    - Test 6: 质量阶跃收敛性，记录原 0.5s 指标因速率限制未通过，两段式正交解耦收敛，开环误差 $0.19\%$，闭环误差 $0.26\%$，稳态抖动标准差 $< 0.0012\text{ kg} \le 0.15\text{ kg}$；
    - Test 7: C3a 闭环时间对齐与平稳性断言，显式接入量化测量，$\text{TV}_{\text{ratio}} = 1.022 \le 1.10$，排除过渡段后平滑最大电流跳变比 $1.000 \le 1.05$。
+3. **BLNN结构与闭环开发检查 ([verify_blnn.m](step3_blnn/verify_blnn.m), 7/7 PASS)**：
+   - 覆盖确定性初始化、自适应节点增长、60节点上限、映射/增强权值更新、固定RBFNN与无网络消融；
+   - 验证双M3508非对称电流限幅下输出有限、限幅不越界；
+   - 检查Paper-structure BLNN在一般不确定性工况中的性能改善，以及CA-BLNN在严重非对称限流下避免权值投影；不等同于原文完整复现验收。
 
 ---
 
@@ -202,6 +239,12 @@ run('step3_adaptive_rls/verify_step3a.m');
 
 %% 5. 运行第三阶段 C3a 自适应闭环基准测试与学术图表生成
 run('step3_adaptive_rls/run_step3a_benchmark.m');
+
+%% 6. 运行BLNN开发版仿真与四组算法对比
+run('step3_blnn/run_blnn_benchmark.m');
+
+%% 7. 运行BLNN结构和闭环验收测试
+run('step3_blnn/verify_blnn.m');
 ```
 
 ---
@@ -216,3 +259,5 @@ run('step3_adaptive_rls/run_step3a_benchmark.m');
    根据可辨识性审查意见，执行器推力增益非对称性（Step 3B）属于强耦合与高敏感辨识问题，**目前严格处于开环独立算法验证阶段，坚决不接入闭环控制器**。
 4. **量化测量接入与反馈通道边界界定**：
    C3a 参数辨识通道接入 8192 线编码器量化位移，控制反馈通道仍采用理想状态，不主张在此工况下已实现全量化状态反馈控制。
+5. **BLNN证据边界**：
+   `step3_blnn`为确定性数值仿真。当前仅复现原文BLNN网络结构，执行器层已适配为M3508电流硬限流；原文完整C1中的八参数RLS、平滑饱和辅助项和Set1至Set3尚未复现。CA-BLNN属于本项目开发扩展，不能表述为原文算法。网络输出同时吸收显式扰动与名义模型失配，不能仅凭单一扰动分量的差值宣称完成真实总扰动辨识。

@@ -1,0 +1,11 @@
+{
+  "figures": [
+    "Fig01_individual_metrics",
+    "Fig02_error_time_series",
+    "Fig03_final_commands",
+    "Fig04_learning_and_nodes"
+  ],
+  "window": "phases 2-5, nominal 40ms snapshots",
+  "allRunsShown": true,
+  "reference": "analysis.json selected[].trajectory"
+}

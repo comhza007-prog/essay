@@ -1,0 +1,290 @@
+[
+  {
+    "id": "A_BASE_1",
+    "filename": "E5F_A_BASE_HW6_L1200_R1200_M0g_S2mm_run01_full.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_BASE_HW6_L1200_R1200_M0g_S2mm_run01_full.csv",
+    "sourceSHA256": "4b4afebd870dc085eb0aa5a4ecbab7879fcbe8575fab4d2563da3171b174d765",
+    "csvLines": [
+      2,
+      834
+    ],
+    "selectedSegmentSHA256": "9ed1ba574526f74b79bbef7c9a52955ea3adb9d067e91342470e1b24df712a89",
+    "build": 61010,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_BASE_2",
+    "filename": "E5F_A_BASE_HW6_L1200_R1200_M0g_S2mm_run02.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_BASE_HW6_L1200_R1200_M0g_S2mm_run02.csv",
+    "sourceSHA256": "ef152f3feca3473dd2580d3a809308b130cc0b9482c53cc5a09ab04a30a1c4f6",
+    "csvLines": [
+      2,
+      801
+    ],
+    "selectedSegmentSHA256": "6e51ff68c332ea628065f21b17566a09bcd4d281c4bb3d40f818def6cb69cdbf",
+    "build": 61010,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_BASE_3",
+    "filename": "E5F_A_BASE_HW6_L1200_R1200_M0g_S2mm_run03.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_BASE_HW6_L1200_R1200_M0g_S2mm_run03.csv",
+    "sourceSHA256": "c880fbf819ec2c11e83406d1f1381d8bd687933be1b3759e0388a696964456da",
+    "csvLines": [
+      2,
+      843
+    ],
+    "selectedSegmentSHA256": "3c397b8dc4f06005ccdd09fd41696726db4b0a338d6a32b29c4ecb57e31f8476",
+    "build": 61010,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_BLNN_1",
+    "filename": "E5F_A_BLNN_HW6_L1200_R1200_M0g_S2mm_run01_full.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_BLNN_HW6_L1200_R1200_M0g_S2mm_run01_full.csv",
+    "sourceSHA256": "55113c5566328c989d4f8195491fd0c895dbb15ac104b8d67e0ac03d856a7137",
+    "csvLines": [
+      2,
+      841
+    ],
+    "selectedSegmentSHA256": "ad14d980e303efc51b62721cc127f4311d262a5cdc9905ea286b7233dde5dd75",
+    "build": 61011,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_BLNN_2",
+    "filename": "E5F_A_BLNN_HW6_L1200_R1200_M0g_S2mm_run02.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_BLNN_HW6_L1200_R1200_M0g_S2mm_run02.csv",
+    "sourceSHA256": "e37eea5d6bbc9bd4fb0f55a7a12af58b3e6c2b6e499c913a6dc09108e372e676",
+    "csvLines": [
+      3,
+      795
+    ],
+    "selectedSegmentSHA256": "2c7e0e220c7d8d0c3fd462a56dbd070043262cc215a208b77d40924a4b4f9f9a",
+    "build": 61011,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_BLNN_3",
+    "filename": "E5F_A_BLNN_HW6_L1200_R1200_M0g_S2mm_run03_attempt02.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_BLNN_HW6_L1200_R1200_M0g_S2mm_run03_attempt02.csv",
+    "sourceSHA256": "07dae15af318cad2699b1c33d2e0136d8425f0345a28d78a14f5254bd3b21475",
+    "csvLines": [
+      3,
+      764
+    ],
+    "selectedSegmentSHA256": "ea5de34ebf07555d5398562d59e3c3f3ee9df15e62750bd7c4eebe3e163a5b73",
+    "build": 61011,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_CA_BLNN_1",
+    "filename": "5F_A_CA_BLNN_HW6_L1200_R1200_M0g_S2mm_run01.csv",
+    "rawPackagePath": "01_原始数据/A/5F_A_CA_BLNN_HW6_L1200_R1200_M0g_S2mm_run01.csv",
+    "sourceSHA256": "8a4d1de12b79cb791731d668674bd3d5b6295f09140fb87e2b6482a9bbd4ca66",
+    "csvLines": [
+      2,
+      877
+    ],
+    "selectedSegmentSHA256": "ad48e3bcfe6810faec8107cef0068689b209559b0c9f07a8d33c58c99dd9a3e2",
+    "build": 61012,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_CA_BLNN_2",
+    "filename": "E5F_A_CA_BLNN_HW6_L1200_R1200_M0g_S2mm_run02.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_CA_BLNN_HW6_L1200_R1200_M0g_S2mm_run02.csv",
+    "sourceSHA256": "4ad562f94a83f937fa1f414a3a7901d55dee55f877a5e5aa4e94084a2f60c6fc",
+    "csvLines": [
+      2,
+      814
+    ],
+    "selectedSegmentSHA256": "f42e9eddf18a24decfde22ac8e2e9ee3dfacea5d8e0235844d8b4e7af2ed02bc",
+    "build": 61012,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "A_CA_BLNN_3",
+    "filename": "E5F_A_CA_BLNN_HW6_L1200_R1200_M0g_S2mm_run03_attempt02_full.csv",
+    "rawPackagePath": "01_原始数据/A/E5F_A_CA_BLNN_HW6_L1200_R1200_M0g_S2mm_run03_attempt02_full.csv",
+    "sourceSHA256": "b1852d0cc4bb63cd9ab00a3976b5a3f884afbc2621ac7060da1051233fb49233",
+    "csvLines": [
+      2,
+      1020
+    ],
+    "selectedSegmentSHA256": "c024fa246c08c5a224df25ac7edf21de1d03d809d301a4f5d2eabf8c9ad6c567",
+    "build": 61012,
+    "limits": [
+      1200,
+      1200
+    ]
+  },
+  {
+    "id": "B_BASE_1",
+    "filename": "E5F_B_BASE_HW6_L1200_R800_M0g_S2mm_run01.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_BASE_HW6_L1200_R800_M0g_S2mm_run01.csv",
+    "sourceSHA256": "c7ccc9e624fb581b5303c99b7a96be3d8cdee14f0378a39f7180616261ac237c",
+    "csvLines": [
+      3,
+      894
+    ],
+    "selectedSegmentSHA256": "426a732b43de088799809b74c2fdd08503afc99274401ed8250d2573fdbca7b8",
+    "build": 63010,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_BASE_2",
+    "filename": "E5F_B_BASE_HW6_L1200_R800_M0g_S2mm_run02.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_BASE_HW6_L1200_R800_M0g_S2mm_run02.csv",
+    "sourceSHA256": "83a1fb19fde84f680e34e4616bca47e2be1f851717430436adcd14c1cb82a2ad",
+    "csvLines": [
+      2,
+      897
+    ],
+    "selectedSegmentSHA256": "f420c72d5164c3518fa77ffe1f7bf7159e02a8f9ba0a54ee8cdba0096c5767b0",
+    "build": 63010,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_BASE_3",
+    "filename": "E5F_B_BASE_HW6_L1200_R800_M0g_S2mm_run03.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_BASE_HW6_L1200_R800_M0g_S2mm_run03.csv",
+    "sourceSHA256": "efec2b611aaf430139e949ed95e31511332c6379cb193d3d24de873ea37d8137",
+    "csvLines": [
+      2,
+      857
+    ],
+    "selectedSegmentSHA256": "759ae8d8c84e23633aeaca55fa317ac0ddf64b377edfcf449b4333c8dd3b6d91",
+    "build": 63010,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_BLNN_1",
+    "filename": "E5F_B_BLNN_HW6_L1200_R800_M0g_S2mm_run01.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_BLNN_HW6_L1200_R800_M0g_S2mm_run01.csv",
+    "sourceSHA256": "ba03b4ff856f198ebe488ecce58d9d56c29fdab2d5d9196c7ee6770ec3359639",
+    "csvLines": [
+      2,
+      866
+    ],
+    "selectedSegmentSHA256": "5237fe47473b85bc0151cd8f5f64ad4c2caac6b3428ede9efc58f6f19807b70d",
+    "build": 63011,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_BLNN_2",
+    "filename": "E5F_B_BLNN_HW6_L1200_R800_M0g_S2mm_run02.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_BLNN_HW6_L1200_R800_M0g_S2mm_run02.csv",
+    "sourceSHA256": "c2978bb9bd8befe865ab2470197a28a07f041a540f8321d3de24680aea405652",
+    "csvLines": [
+      2,
+      900
+    ],
+    "selectedSegmentSHA256": "b0f618a3072ec90f532a12ee9ef1a42f6254d4e8e31ef83c70ea806fa114ffd3",
+    "build": 63011,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_BLNN_3",
+    "filename": "E5F_B_BLNN_HW6_L1200_R800_M0g_S2mm_run03.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_BLNN_HW6_L1200_R800_M0g_S2mm_run03.csv",
+    "sourceSHA256": "983d37ccf8707e0adddf9faa1b045622e18a6757ad3016c5cd141c895e3739f1",
+    "csvLines": [
+      2,
+      859
+    ],
+    "selectedSegmentSHA256": "709b63fba7341111451654b71f470e9c67adf94b66296c0d37cd87a6cdc9e05e",
+    "build": 63011,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_CA_BLNN_1",
+    "filename": "E5F_B_CA_BLNN_HW6_L1200_R800_M0g_S2mm_run01.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_CA_BLNN_HW6_L1200_R800_M0g_S2mm_run01.csv",
+    "sourceSHA256": "7d69d7f450a29b3ac431ce93e649953fc9127704e9785a80e5b380c52a7d2b58",
+    "csvLines": [
+      2,
+      866
+    ],
+    "selectedSegmentSHA256": "4529df59853a50e4ee6d2cc6d619dd81ddccec37b462f3e65d3a33452d9d6347",
+    "build": 63012,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_CA_BLNN_2",
+    "filename": "E5F_B_CA_BLNN_HW6_L1200_R800_M0g_S2mm_run02.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_CA_BLNN_HW6_L1200_R800_M0g_S2mm_run02.csv",
+    "sourceSHA256": "12ec5953f4c1e887c7dc3df25a44d1eb991a1cfcbb762b96155ade6d5b7cefc7",
+    "csvLines": [
+      2,
+      910
+    ],
+    "selectedSegmentSHA256": "7f5a51f7fe5496066836d7c6048e09cc49510ad80d63e38eddf227897d1eb3ac",
+    "build": 63012,
+    "limits": [
+      1200,
+      800
+    ]
+  },
+  {
+    "id": "B_CA_BLNN_3",
+    "filename": "E5F_B_CA_BLNN_HW6_L1200_R800_M0g_S2mm_run03.csv",
+    "rawPackagePath": "01_原始数据/B/E5F_B_CA_BLNN_HW6_L1200_R800_M0g_S2mm_run03.csv",
+    "sourceSHA256": "f7a28c962d412b6ac85433c7a6a9461a5ba48db3e3d44e524680c7698361944a",
+    "csvLines": [
+      2,
+      865
+    ],
+    "selectedSegmentSHA256": "1278e7373cadf36e317de026118d0c837551343976342b181fef463e10dde438",
+    "build": 63012,
+    "limits": [
+      1200,
+      800
+    ]
+  }
+]
